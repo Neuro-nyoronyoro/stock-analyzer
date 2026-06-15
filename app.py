@@ -5,8 +5,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 import streamlit as st
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
+from streamlit_cookies_controller import CookieController
 from db.database import init_db, create_user_session, get_user_by_session_token, delete_user_session
-from core.cookie_utils import get_session_token, set_session_cookie, clear_session_cookie
+from core.cookie_utils import get_session_token, COOKIE_NAME, COOKIE_DAYS
 from core.yahoo_direct import get_price_history_direct
 
 init_db()
@@ -82,7 +83,8 @@ if not st.session_state.get("user_id"):
                     st.session_state["user_name"]      = user["display_name"]
                     st.session_state["is_admin"]       = user["is_admin"]
                     st.session_state["_session_token"] = token
-                    set_session_cookie(token)
+                    # クッキーは次のレンダリング（ダッシュボード）でセットする
+                    st.session_state["_pending_cookie"] = token
                     st.rerun()
                 else:
                     st.error(err)
@@ -124,6 +126,14 @@ if not st.session_state.get("user_id"):
                 st.success("メールアドレスが登録されている場合、再設定メールを送信しました。")
     st.stop()
 
+# ── ログイン済み：クッキーのセット（ログイン直後の1回のみ）──────────
+# st.rerun() 前に components.html() を呼ぶと JS が実行される前に
+# 次のレンダリングに切り替わるため、ここ（ダッシュボード表示時）でセットする
+_cookie_ctrl = CookieController(key="_sc_ctrl")
+if "_pending_cookie" in st.session_state:
+    _pending = st.session_state.pop("_pending_cookie")
+    _cookie_ctrl.set(COOKIE_NAME, _pending, max_age=COOKIE_DAYS * 24 * 3600)
+
 # ── ログイン済み：サイドバーにユーザー情報 ────────────────────────
 with st.sidebar:
     st.caption(f"👤 {st.session_state['user_name']}")
@@ -135,7 +145,10 @@ with st.sidebar:
                 delete_user_session(_t)
             except Exception:
                 pass
-        clear_session_cookie()
+        try:
+            _cookie_ctrl.remove(COOKIE_NAME)
+        except Exception:
+            pass
         st.session_state.clear()
         st.rerun()
 

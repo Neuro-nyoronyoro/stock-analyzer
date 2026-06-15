@@ -1,32 +1,34 @@
 import streamlit as st
-from core.cookie_utils import get_session_token, clear_session_cookie
+from streamlit_cookies_controller import CookieController
+from core.cookie_utils import get_session_token, COOKIE_NAME, COOKIE_DAYS
 from db.database import get_user_by_session_token, delete_user_session
 
 
 def require_login() -> dict:
     """ログインチェック。未ログイン時はCookieからの自動ログインを試みる。"""
-    if st.session_state.get("user_id"):
-        _render_sidebar()
-        return _user_dict()
+    if not st.session_state.get("user_id"):
+        token = get_session_token()
+        if token:
+            user = get_user_by_session_token(token)
+            if user:
+                st.session_state["user_id"]        = user["id"]
+                st.session_state["user_email"]     = user["email"]
+                st.session_state["user_name"]      = user["display_name"]
+                st.session_state["is_admin"]       = user["is_admin"]
+                st.session_state["_session_token"] = token
 
-    token = get_session_token()
-    if token:
-        user = get_user_by_session_token(token)
-        if user:
-            st.session_state["user_id"]        = user["id"]
-            st.session_state["user_email"]     = user["email"]
-            st.session_state["user_name"]      = user["display_name"]
-            st.session_state["is_admin"]       = user["is_admin"]
-            st.session_state["_session_token"] = token
-            _render_sidebar()
-            return _user_dict()
+    if not st.session_state.get("user_id"):
+        st.warning("ログインが必要です。")
+        st.markdown("[← ログインページへ](/) ")
+        st.stop()
 
-    st.warning("ログインが必要です。")
-    st.markdown("[← ログインページへ](/) ")
-    st.stop()
+    # ログイン済みの場合のみコントローラーを生成（ログアウト用）
+    controller = CookieController(key="_sc_ctrl")
+    _render_sidebar(controller)
+    return _user_dict()
 
 
-def _render_sidebar():
+def _render_sidebar(controller: CookieController):
     with st.sidebar:
         st.caption(f"👤 {st.session_state['user_name']}")
         if st.button("ログアウト", key="__logout__", use_container_width=True):
@@ -36,7 +38,10 @@ def _render_sidebar():
                     delete_user_session(token)
                 except Exception:
                     pass
-            clear_session_cookie()
+            try:
+                controller.remove(COOKIE_NAME)
+            except Exception:
+                pass
             st.session_state.clear()
             st.rerun()
 
