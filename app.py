@@ -57,20 +57,10 @@ _cookie_ctrl = CookieController(key="_sc_ctrl")
 # ログイン直後のクッキー書き込み（_pending_cookie フラグ経由）
 if "_pending_cookie" in st.session_state:
     _pending = st.session_state.pop("_pending_cookie")
-    try:
-        _cookie_ctrl.set(COOKIE_NAME, _pending)  # max_age なし（セッションクッキー）
-    except Exception as _e:
-        st.sidebar.error(f"[DEBUG] cookie set error: {_e}")
+    _cookie_ctrl.set(COOKIE_NAME, _pending)
 
 # ── クッキーからの自動ログイン ────────────────────────────────────
 _token = _cookie_ctrl.get(COOKIE_NAME)
-
-# DEBUG: サイドバーにクッキー状態を表示（確認後に削除）
-with st.sidebar:
-    with st.expander("🔧 Cookie Debug（確認後に削除）", expanded=True):
-        st.write("controller.get():", _token)
-        st.write("Cookie header:", st.context.headers.get("Cookie", "(empty)"))
-        st.write("session user_id:", st.session_state.get("user_id"))
 
 if not st.session_state.get("user_id"):
     if _token:
