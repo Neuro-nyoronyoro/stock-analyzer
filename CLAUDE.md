@@ -137,6 +137,16 @@ SCORE_WEIGHTS = {
 - **現在: SANDBOXモード** → 検証済みアドレスにしか送れない
 - SESプロダクションアクセス申請中（承認後に家族のアカウント登録作業を実施）
 
+## EC2 自動停止・起動スケジュール（EventBridge Scheduler）
+| スケジュール名 | Cron式 | タイムゾーン | 動作 |
+|---|---|---|---|
+| `ec2-stop-night` | `0 21 * * ? *` | Asia/Tokyo | 毎日 21:00 に EC2 停止 |
+| `ec2-start-morning` | `0 7 * * ? *` | Asia/Tokyo | 毎日 07:00 に EC2 起動 |
+
+- IAM ロール: `EventBridgeScheduler-EC2-StartStop`
+- nginx・stock-analyzer.service は `enabled` 設定済み → EC2 再起動時に自動起動する
+- Elastic IP により停止・起動後も IP アドレスは `57.182.51.133` で固定
+
 ## 株価アラート（cron）
 - スクリプト: `/home/ssm-user/stock_analyzer/scripts/check_alerts.py`
 - 平日 9:00 / 12:00 / 15:30 に3回実行（crontab設定済み）
