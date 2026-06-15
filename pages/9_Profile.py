@@ -179,8 +179,9 @@ with st.expander("アカウントを削除する"):
         if confirm_text != "削除する":
             st.error('「削除する」と入力してください')
         else:
-            from db.database import get_session, User, Portfolio, Watchlist, PriceAlert, ChatSession, ChatMessage
+            from db.database import get_session, User, Portfolio, Watchlist, PriceAlert, ChatSession, ChatMessage, delete_all_user_sessions
             uid = user["id"]
+            delete_all_user_sessions(uid)
             s = get_session()
             # 関連データをすべて削除
             sessions = s.query(ChatSession).filter_by(user_id=uid).all()

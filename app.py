@@ -3,9 +3,10 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
-from db.database import init_db
+import extra_streamlit_components as stx
+from db.database import init_db, create_user_session, get_user_by_session_token, delete_user_session
 from core.yahoo_direct import get_price_history_direct
 
 init_db()
@@ -15,6 +16,9 @@ st.set_page_config(
     page_icon="📈",
     layout="wide",
 )
+
+COOKIE_NAME = "stock_session"
+cookie_manager = stx.CookieManager(key="_sc_mgr")
 
 # ── クエリパラメータ処理（メール認証・パスワードリセット） ──────────
 params = st.query_params
@@ -49,6 +53,24 @@ if "reset" in params:
                 st.error("リンクが無効または期限切れです（有効期限1時間）")
     st.stop()
 
+# ── クッキーからの自動ログイン ────────────────────────────────────
+if not st.session_state.get("user_id"):
+    _token = cookie_manager.get(COOKIE_NAME)
+    if _token:
+        _u = get_user_by_session_token(_token)
+        if _u:
+            st.session_state["user_id"]        = _u["id"]
+            st.session_state["user_email"]     = _u["email"]
+            st.session_state["user_name"]      = _u["display_name"]
+            st.session_state["is_admin"]       = _u["is_admin"]
+            st.session_state["_session_token"] = _token
+            st.rerun()
+        else:
+            try:
+                cookie_manager.delete(COOKIE_NAME)
+            except Exception:
+                pass
+
 # ── 未ログイン：ログイン / 登録 / パスワード忘れ ──────────────────
 if not st.session_state.get("user_id"):
     st.title("📈 株式投資ダッシュボード")
@@ -62,10 +84,14 @@ if not st.session_state.get("user_id"):
                 from core.auth import login
                 user, err = login(email, password)
                 if user:
-                    st.session_state["user_id"]    = user["id"]
-                    st.session_state["user_email"] = user["email"]
-                    st.session_state["user_name"]  = user["display_name"]
-                    st.session_state["is_admin"]   = user["is_admin"]
+                    token = create_user_session(user["id"])
+                    st.session_state["user_id"]        = user["id"]
+                    st.session_state["user_email"]     = user["email"]
+                    st.session_state["user_name"]      = user["display_name"]
+                    st.session_state["is_admin"]       = user["is_admin"]
+                    st.session_state["_session_token"] = token
+                    cookie_manager.set(COOKIE_NAME, token,
+                                       expires_at=datetime.now() + timedelta(days=30))
                     st.rerun()
                 else:
                     st.error(err)
@@ -112,6 +138,16 @@ with st.sidebar:
     st.caption(f"👤 {st.session_state['user_name']}")
     st.caption(f"📧 {st.session_state['user_email']}")
     if st.button("ログアウト", use_container_width=True, key="main_logout"):
+        _t = st.session_state.get("_session_token")
+        if _t:
+            try:
+                delete_user_session(_t)
+            except Exception:
+                pass
+        try:
+            cookie_manager.delete(COOKIE_NAME)
+        except Exception:
+            pass
         st.session_state.clear()
         st.rerun()
 

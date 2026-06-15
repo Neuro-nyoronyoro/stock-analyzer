@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine, Column, String, Float, Integer, Date, DateTime, Text, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import secrets
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "stock_analyzer.db")
 engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
@@ -100,6 +101,14 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class UserSession(Base):
+    __tablename__ = "user_session"
+    token      = Column(String, primary_key=True)
+    user_id    = Column(Integer, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class UserProfile(Base):
     __tablename__ = "user_profile"
     user_id          = Column(Integer, primary_key=True)
@@ -191,6 +200,63 @@ def get_user_profile(user_id: int) -> dict:
             "investment_memo": p.investment_memo or "",
             "is_set": True,
         }
+    finally:
+        s.close()
+
+
+SESSION_DAYS = 30
+
+
+def create_user_session(user_id: int) -> str:
+    """セッショントークンを生成してDBに保存し、トークン文字列を返す"""
+    s = get_session()
+    try:
+        token = secrets.token_urlsafe(32)
+        s.add(UserSession(
+            token=token,
+            user_id=user_id,
+            expires_at=datetime.utcnow() + timedelta(days=SESSION_DAYS),
+        ))
+        s.commit()
+        return token
+    finally:
+        s.close()
+
+
+def get_user_by_session_token(token: str) -> dict | None:
+    """トークンが有効なら対応するユーザー情報を返す。無効・期限切れは None"""
+    s = get_session()
+    try:
+        sess = s.query(UserSession).filter_by(token=token).first()
+        if not sess or sess.expires_at < datetime.utcnow():
+            return None
+        user = s.query(User).filter_by(id=sess.user_id).first()
+        if not user or not user.is_approved or not user.is_verified:
+            return None
+        return {
+            "id":           user.id,
+            "email":        user.email,
+            "display_name": user.display_name,
+            "is_admin":     user.is_admin,
+        }
+    finally:
+        s.close()
+
+
+def delete_user_session(token: str):
+    s = get_session()
+    try:
+        s.query(UserSession).filter_by(token=token).delete()
+        s.commit()
+    finally:
+        s.close()
+
+
+def delete_all_user_sessions(user_id: int):
+    s = get_session()
+    try:
+        s.query(UserSession).filter_by(user_id=user_id).delete()
+        s.commit()
     finally:
         s.close()
 
