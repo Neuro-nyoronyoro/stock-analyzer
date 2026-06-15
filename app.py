@@ -52,20 +52,27 @@ if "reset" in params:
     st.stop()
 
 # ── クッキーコントローラー（ログインチェックより前に生成）──────────
-# CookieController はここで生成することで、未ログイン時にもコンポーネントが
-# レンダリングされ、ブラウザからクッキー値を受信してリランをトリガーする。
 _cookie_ctrl = CookieController(key="_sc_ctrl")
 
 # ログイン直後のクッキー書き込み（_pending_cookie フラグ経由）
-# st.rerun() の直前に set() を呼ぶと JS 実行前に次レンダリングに切り替わるため、
-# rerun 後のこのタイミングで書き込む。
 if "_pending_cookie" in st.session_state:
     _pending = st.session_state.pop("_pending_cookie")
-    _cookie_ctrl.set(COOKIE_NAME, _pending, max_age=COOKIE_DAYS * 24 * 3600)
+    try:
+        _cookie_ctrl.set(COOKIE_NAME, _pending)  # max_age なし（セッションクッキー）
+    except Exception as _e:
+        st.sidebar.error(f"[DEBUG] cookie set error: {_e}")
 
 # ── クッキーからの自動ログイン ────────────────────────────────────
+_token = _cookie_ctrl.get(COOKIE_NAME)
+
+# DEBUG: サイドバーにクッキー状態を表示（確認後に削除）
+with st.sidebar:
+    with st.expander("🔧 Cookie Debug（確認後に削除）", expanded=True):
+        st.write("controller.get():", _token)
+        st.write("Cookie header:", st.context.headers.get("Cookie", "(empty)"))
+        st.write("session user_id:", st.session_state.get("user_id"))
+
 if not st.session_state.get("user_id"):
-    _token = _cookie_ctrl.get(COOKIE_NAME)
     if _token:
         _u = get_user_by_session_token(_token)
         if _u:
