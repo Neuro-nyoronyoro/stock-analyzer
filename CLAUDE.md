@@ -96,6 +96,7 @@ sudo systemctl restart stock-analyzer.service
 | PriceAlert | 株価アラート設定（user_id, ticker, alert_type: above/below, threshold） |
 | ChatSession | AIチャットセッション（最大10件、古いものは自動削除） |
 | ChatMessage | チャットメッセージ（セッションあたり最大20件） |
+| UserProfile | 投資プロフィール（user_id, investment_style, risk_tolerance, time_horizon, weight_dividend/financial/growth/value, investment_memo） |
 
 - ローカルの `stock_analyzer.db` はテスト用。本番DBはEC2上にある
 - `init_db()` が自動でテーブル作成・マイグレーションを実行する

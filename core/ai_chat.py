@@ -39,21 +39,44 @@ def build_context(holdings_data: list, watchlist_data: list, market_data: dict) 
     return "\n".join(lines)
 
 
-def chat_response(messages: list, context: str) -> str:
+_STYLE_MAP   = {
+    "dividend": "高配当・安定配当重視（インカムゲイン）",
+    "growth":   "成長重視（キャピタルゲイン）",
+    "value":    "割安銘柄重視（バリュー投資）",
+    "balanced": "バランス型（配当・成長・割安を均等重視）",
+    "custom":   "カスタム設定",
+}
+_RISK_MAP    = {"low": "低リスク志向（安定重視）", "medium": "中程度のリスク許容", "high": "高リスク許容（積極的）"}
+_HORIZON_MAP = {"short": "短期（1年未満）", "medium": "中期（1〜5年）", "long": "長期（5年以上）"}
+
+
+def chat_response(messages: list, context: str, user_profile: dict = None) -> str:
     """会話履歴とポートフォリオ情報をもとにAI応答を生成する"""
     if not ANTHROPIC_API_KEY:
         return "※ ANTHROPIC_API_KEY が未設定です。.env ファイルを確認してください。"
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
+    if user_profile and user_profile.get("is_set"):
+        style   = _STYLE_MAP.get(user_profile["investment_style"], "バランス型")
+        risk    = _RISK_MAP.get(user_profile["risk_tolerance"], "中程度のリスク許容")
+        horizon = _HORIZON_MAP.get(user_profile["time_horizon"], "長期（5年以上）")
+        profile_str = f"投資スタイル: {style} / {risk} / 投資期間: {horizon}"
+        if user_profile.get("investment_memo"):
+            profile_str += f"\n本人コメント: {user_profile['investment_memo']}"
+    else:
+        profile_str = "投資スタイル: 中長期・配当重視 / 低〜中リスク / 投資期間: 長期（5年以上）"
+
     system_prompt = f"""あなたは個人投資家専用のAI投資アドバイザーです。
-ユーザーの投資スタイルは「中長期・配当重視・NISA活用」です。
 
-以下はユーザーの現在の投資状況です（リアルタイムデータ）:
+【ユーザーの投資プロフィール】
+{profile_str}
 
+【現在の投資状況（リアルタイムデータ）】
 {context}
 
 回答の方針:
+- ユーザーの投資プロフィールに合わせた視点でアドバイスする
 - 上記のデータを積極的に参照し、具体的な数値に基づいて分析する
 - 投資は自己責任であることを前提に、参考情報として提供する
 - 日本語で答える

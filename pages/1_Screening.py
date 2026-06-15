@@ -12,10 +12,25 @@ from config import DEFAULT_SCREEN
 st.set_page_config(page_title="銘柄スクリーニング", page_icon="🔍", layout="wide")
 
 from core.auth_check import require_login
-require_login()
+from db.database import get_user_profile
+user = require_login()
+
+user_profile = get_user_profile(user["id"])
+# "balanced" プリセット重みは config.py のデフォルト値と同じため ScoreCache を再利用できる
+use_default_weights = (
+    not user_profile["is_set"] or
+    user_profile["investment_style"] == "balanced"
+)
 
 st.title("🔍 銘柄スクリーニング")
 st.caption("条件を設定して投資候補銘柄を絞り込みます")
+
+if not use_default_weights:
+    style_labels = {
+        "dividend": "💰 配当重視", "growth": "📈 成長重視",
+        "value": "🏷️ 割安重視", "custom": "🔧 カスタム",
+    }
+    st.info(f"投資プロフィール「{style_labels.get(user_profile['investment_style'], '?')}」の重みでスコアを計算します。スコアキャッシュは使用しません。")
 
 # サイドバー：フィルター条件
 with st.sidebar:
@@ -52,9 +67,11 @@ if clear_cache:
 
 def fetch_one(stock: dict) -> dict | None:
     """1銘柄のデータを取得してスコアを返す（キャッシュ優先）"""
-    ticker = stock["ticker"]
+    ticker       = stock["ticker"]
+    user_weights = user_profile["weights"]
 
-    if use_cache:
+    # デフォルト重みのときだけ ScoreCache を利用する
+    if use_cache and use_default_weights:
         cached = get_cached_score(ticker)
         if cached is not None:
             return {"ticker": ticker, "name": stock["name"], "sector": stock["sector"],
@@ -67,8 +84,9 @@ def fetch_one(stock: dict) -> dict | None:
     if info.get("_partial"):
         return None
 
-    scores = calc_total_score(info)
-    save_score_cache(ticker, scores)
+    scores = calc_total_score(info, weights=user_weights)
+    if use_default_weights:
+        save_score_cache(ticker, scores)
 
     return {
         "ticker":   ticker,
@@ -98,6 +116,8 @@ if not run:
 
 # ── キャッシュのみモード ──────────────────────────────────────
 if cache_only:
+    if not use_default_weights:
+        st.warning("カスタム重みが設定されています。キャッシュのみモードではデフォルト重みで計算されたスコアが表示されます。正確なスコアは通常モードで実行してください。")
     from db.database import get_session, ScoreCache
     ticker_map = {s["ticker"]: s for s in MAJOR_JP + MAJOR_US}
     db_session = get_session()

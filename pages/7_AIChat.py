@@ -10,8 +10,10 @@ from db.database import get_session, Portfolio, Watchlist, ChatSession, ChatMess
 st.set_page_config(page_title="AIチャット", page_icon="🤖", layout="wide")
 
 from core.auth_check import require_login
+from db.database import get_user_profile
 user = require_login()
 user_id = user["id"]
+user_profile = get_user_profile(user_id)
 
 st.title("🤖 AI投資アドバイザー")
 st.caption("ポートフォリオ・ウォッチリストの情報を参照しながら投資に関する質問に答えます。")
@@ -206,7 +208,7 @@ if pending:
     with st.chat_message("assistant"):
         with st.spinner("考え中..."):
             msgs_for_api = db_get_messages(st.session_state[SESSION_KEY])
-            reply = chat_response(msgs_for_api, context)
+            reply = chat_response(msgs_for_api, context, user_profile=user_profile)
         st.markdown(reply)
     db_save_message(st.session_state[SESSION_KEY], "assistant", reply)
     st.rerun()
@@ -233,6 +235,6 @@ if prompt := st.chat_input("投資について何でも聞いてください..."
     with st.chat_message("assistant"):
         with st.spinner("考え中..."):
             msgs_for_api = db_get_messages(st.session_state[SESSION_KEY])
-            reply = chat_response(msgs_for_api, context)
+            reply = chat_response(msgs_for_api, context, user_profile=user_profile)
         st.markdown(reply)
     db_save_message(st.session_state[SESSION_KEY], "assistant", reply)

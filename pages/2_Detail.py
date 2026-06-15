@@ -15,7 +15,9 @@ from datetime import datetime
 st.set_page_config(page_title="銘柄詳細", page_icon="📊", layout="wide")
 
 from core.auth_check import require_login
+from db.database import get_user_profile
 user = require_login()
+user_profile = get_user_profile(user["id"])
 
 st.title("📊 銘柄詳細")
 
@@ -61,7 +63,7 @@ with st.spinner(f"{ticker} のデータを取得中..."):
     period  = st.sidebar.selectbox("チャート期間", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "最大"], index=3)
     df_hist = get_price_history(ticker, period)
     df_div  = get_dividend_history(ticker)
-    scores  = calc_total_score(info)
+    scores  = calc_total_score(info, weights=user_profile["weights"])
 
 if "error" in info:
     st.error(f"データ取得エラー: {info['error']}")
@@ -205,7 +207,7 @@ with tab3:
         df_tech_ai = add_indicators(df_temp) if not df_temp.empty else df_temp
         sigs = get_signal(df_tech_ai)
         with st.spinner("Claudeが分析中..."):
-            report = generate_report(info, scores, sigs)
+            report = generate_report(info, scores, sigs, user_profile=user_profile)
         st.markdown(report)
 
 with tab4:

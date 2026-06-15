@@ -147,14 +147,14 @@ def score_value(info: dict) -> float:
     return _clamp(score)
 
 
-def calc_total_score(info: dict) -> dict:
-    """総合スコアと内訳を計算する"""
+def calc_total_score(info: dict, weights: dict = None) -> dict:
+    """総合スコアと内訳を計算する。weights を省略すると config.py のデフォルト重みを使用。"""
     d = score_dividend(info)
     f = score_financial(info)
     g = score_growth(info)
     v = score_value(info)
 
-    w = SCORE_WEIGHTS
+    w = weights if weights else SCORE_WEIGHTS
     total = (
         d * w["dividend"]
         + f * w["financial"]

@@ -100,6 +100,20 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class UserProfile(Base):
+    __tablename__ = "user_profile"
+    user_id          = Column(Integer, primary_key=True)
+    investment_style = Column(String, default="balanced")  # dividend/growth/value/balanced/custom
+    risk_tolerance   = Column(String, default="medium")    # low/medium/high
+    time_horizon     = Column(String, default="long")      # short/medium/long
+    weight_dividend  = Column(Float, default=0.30)
+    weight_financial = Column(Float, default=0.35)
+    weight_growth    = Column(Float, default=0.20)
+    weight_value     = Column(Float, default=0.15)
+    investment_memo  = Column(Text, default="")
+    updated_at       = Column(DateTime, default=datetime.utcnow)
+
+
 def _migrate():
     """既存テーブルへの user_id カラム追加・watchlist の unique 制約修正"""
     from sqlalchemy import text, inspect
@@ -148,3 +162,59 @@ def init_db():
 
 def get_session():
     return SessionLocal()
+
+
+def get_user_profile(user_id: int) -> dict:
+    """ユーザーの投資プロフィールを返す。未設定の場合は config.py のデフォルト重みを使う。"""
+    s = get_session()
+    try:
+        p = s.query(UserProfile).filter_by(user_id=user_id).first()
+        if not p:
+            return {
+                "investment_style": "balanced",
+                "risk_tolerance":   "medium",
+                "time_horizon":     "long",
+                "weights": {"dividend": 0.30, "financial": 0.35, "growth": 0.20, "value": 0.15},
+                "investment_memo": "",
+                "is_set": False,
+            }
+        return {
+            "investment_style": p.investment_style,
+            "risk_tolerance":   p.risk_tolerance,
+            "time_horizon":     p.time_horizon,
+            "weights": {
+                "dividend":  p.weight_dividend,
+                "financial": p.weight_financial,
+                "growth":    p.weight_growth,
+                "value":     p.weight_value,
+            },
+            "investment_memo": p.investment_memo or "",
+            "is_set": True,
+        }
+    finally:
+        s.close()
+
+
+def save_user_profile(user_id: int, investment_style: str, risk_tolerance: str,
+                      time_horizon: str, weights: dict, investment_memo: str):
+    s = get_session()
+    try:
+        p = s.query(UserProfile).filter_by(user_id=user_id).first()
+        if not p:
+            p = UserProfile(user_id=user_id)
+            s.add(p)
+        p.investment_style  = investment_style
+        p.risk_tolerance    = risk_tolerance
+        p.time_horizon      = time_horizon
+        p.weight_dividend   = weights["dividend"]
+        p.weight_financial  = weights["financial"]
+        p.weight_growth     = weights["growth"]
+        p.weight_value      = weights["value"]
+        p.investment_memo   = investment_memo
+        p.updated_at        = datetime.utcnow()
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
