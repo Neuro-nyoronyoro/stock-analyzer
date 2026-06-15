@@ -1,3 +1,4 @@
+from __future__ import annotations
 from sqlalchemy import create_engine, Column, String, Float, Integer, Date, DateTime, Text, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timedelta
