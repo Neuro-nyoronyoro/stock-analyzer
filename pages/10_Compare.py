@@ -273,7 +273,7 @@ if st.button("比較AIレポートを生成", type="primary"):
             client  = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
             message = client.messages.create(
                 model=CLAUDE_MODEL,
-                max_tokens=1500,
+                max_tokens=4000,
                 messages=[{"role": "user", "content": prompt}],
             )
             st.markdown(message.content[0].text)
