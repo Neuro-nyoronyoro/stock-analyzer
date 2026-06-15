@@ -7,7 +7,7 @@ from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 from streamlit_cookies_controller import CookieController
 from db.database import init_db, create_user_session, get_user_by_session_token, delete_user_session
-from core.cookie_utils import get_session_token, COOKIE_NAME, COOKIE_DAYS
+from core.cookie_utils import COOKIE_NAME, COOKIE_DAYS
 from core.yahoo_direct import get_price_history_direct
 
 init_db()
@@ -51,9 +51,21 @@ if "reset" in params:
                 st.error("リンクが無効または期限切れです（有効期限1時間）")
     st.stop()
 
+# ── クッキーコントローラー（ログインチェックより前に生成）──────────
+# CookieController はここで生成することで、未ログイン時にもコンポーネントが
+# レンダリングされ、ブラウザからクッキー値を受信してリランをトリガーする。
+_cookie_ctrl = CookieController(key="_sc_ctrl")
+
+# ログイン直後のクッキー書き込み（_pending_cookie フラグ経由）
+# st.rerun() の直前に set() を呼ぶと JS 実行前に次レンダリングに切り替わるため、
+# rerun 後のこのタイミングで書き込む。
+if "_pending_cookie" in st.session_state:
+    _pending = st.session_state.pop("_pending_cookie")
+    _cookie_ctrl.set(COOKIE_NAME, _pending, max_age=COOKIE_DAYS * 24 * 3600)
+
 # ── クッキーからの自動ログイン ────────────────────────────────────
 if not st.session_state.get("user_id"):
-    _token = get_session_token()
+    _token = _cookie_ctrl.get(COOKIE_NAME)
     if _token:
         _u = get_user_by_session_token(_token)
         if _u:
@@ -62,7 +74,6 @@ if not st.session_state.get("user_id"):
             st.session_state["user_name"]      = _u["display_name"]
             st.session_state["is_admin"]       = _u["is_admin"]
             st.session_state["_session_token"] = _token
-            st.rerun()
 
 # ── 未ログイン：ログイン / 登録 / パスワード忘れ ──────────────────
 if not st.session_state.get("user_id"):
@@ -83,7 +94,7 @@ if not st.session_state.get("user_id"):
                     st.session_state["user_name"]      = user["display_name"]
                     st.session_state["is_admin"]       = user["is_admin"]
                     st.session_state["_session_token"] = token
-                    # クッキーは次のレンダリング（ダッシュボード）でセットする
+                    # クッキーは次のレンダリングで書き込む（タイミング問題回避）
                     st.session_state["_pending_cookie"] = token
                     st.rerun()
                 else:
@@ -111,7 +122,7 @@ if not st.session_state.get("user_id"):
                         send_verification_email(reg_email, name, token)
                         st.success("確認メールを送信しました。メールのリンクをクリックして認証を完了してください。")
                     else:
-                        st.error(token)  # tokenにエラーメッセージが入っている
+                        st.error(token)
 
     with tab3:
         with st.form("forgot_form"):
@@ -122,17 +133,8 @@ if not st.session_state.get("user_id"):
                 user_info, token = create_reset_token(forgot_email)
                 if user_info and token:
                     send_reset_email(user_info["email"], user_info["display_name"], token)
-                # セキュリティ上、存在有無に関わらず同じメッセージ
                 st.success("メールアドレスが登録されている場合、再設定メールを送信しました。")
     st.stop()
-
-# ── ログイン済み：クッキーのセット（ログイン直後の1回のみ）──────────
-# st.rerun() 前に components.html() を呼ぶと JS が実行される前に
-# 次のレンダリングに切り替わるため、ここ（ダッシュボード表示時）でセットする
-_cookie_ctrl = CookieController(key="_sc_ctrl")
-if "_pending_cookie" in st.session_state:
-    _pending = st.session_state.pop("_pending_cookie")
-    _cookie_ctrl.set(COOKIE_NAME, _pending, max_age=COOKIE_DAYS * 24 * 3600)
 
 # ── ログイン済み：サイドバーにユーザー情報 ────────────────────────
 with st.sidebar:

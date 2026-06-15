@@ -1,13 +1,17 @@
 import streamlit as st
 from streamlit_cookies_controller import CookieController
-from core.cookie_utils import get_session_token, COOKIE_NAME, COOKIE_DAYS
+from core.cookie_utils import COOKIE_NAME
 from db.database import get_user_by_session_token, delete_user_session
 
 
 def require_login() -> dict:
-    """ログインチェック。未ログイン時はCookieからの自動ログインを試みる。"""
+    """ログインチェック。未ログイン時はCookieからの自動ログインを試みる。
+    CookieController はここで生成するため、未ログイン状態でもコンポーネントが
+    レンダリングされ、ブラウザのクッキーを受信→リランで自動ログインが機能する。"""
+    controller = CookieController(key="_sc_ctrl")
+
     if not st.session_state.get("user_id"):
-        token = get_session_token()
+        token = controller.get(COOKIE_NAME)
         if token:
             user = get_user_by_session_token(token)
             if user:
@@ -22,8 +26,6 @@ def require_login() -> dict:
         st.markdown("[← ログインページへ](/) ")
         st.stop()
 
-    # ログイン済みの場合のみコントローラーを生成（ログアウト用）
-    controller = CookieController(key="_sc_ctrl")
     _render_sidebar(controller)
     return _user_dict()
 
