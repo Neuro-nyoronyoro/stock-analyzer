@@ -16,6 +16,9 @@ from db.database import get_user_profile, save_user_profile
 st.subheader("📊 投資プロフィール設定")
 st.caption("スクリーニングのスコアリング重みとAIの分析傾向がこの設定に合わせて変わります。")
 
+if st.session_state.pop("invest_profile_saved", False):
+    st.success("投資プロフィールを保存しました。次回のスクリーニングから反映されます。")
+
 STYLE_PRESETS = {
     "dividend": {
         "label": "💰 配当重視",
@@ -118,7 +121,7 @@ with st.form("invest_profile_form"):
                 weights=selected_weights,
                 investment_memo=memo,
             )
-            st.success("投資プロフィールを保存しました。次回のスクリーニングから反映されます。")
+            st.session_state["invest_profile_saved"] = True
             st.rerun()
 
 st.divider()
