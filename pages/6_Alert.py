@@ -17,10 +17,21 @@ st.title("🔔 価格アラート設定")
 st.caption("1日3回（9:05 / 12:30 / 15:35）チェックし、条件達成時にメールで通知します。")
 
 if st.session_state.pop("alert_saved", False):
-    st.markdown(
-        """<div style="position:fixed;top:3.5rem;left:50%;transform:translateX(-50%);background:#d4edda;color:#155724;padding:.6rem 1.8rem;border-radius:.5rem;border:1px solid #c3e6cb;z-index:9999;font-size:1rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);">✅ アラート設定を保存しました</div>""",
-        unsafe_allow_html=True,
-    )
+    st.markdown("""
+<style>
+@keyframes _banner_fade {
+    0%,65%{opacity:1} 100%{opacity:0;pointer-events:none}
+}
+._save_banner{
+    position:fixed;top:3.5rem;left:50%;transform:translateX(-50%);
+    background:#d4edda;color:#155724;padding:.6rem 1.8rem;
+    border-radius:.5rem;border:1px solid #c3e6cb;z-index:9999;
+    font-size:1rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);
+    animation:_banner_fade 3s forwards;
+}
+</style>
+<div class="_save_banner">✅ アラート設定を保存しました</div>
+""", unsafe_allow_html=True)
 
 
 session = get_session()
