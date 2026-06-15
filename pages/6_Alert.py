@@ -16,8 +16,6 @@ user_id = user["id"]
 st.title("🔔 価格アラート設定")
 st.caption("1日3回（9:05 / 12:30 / 15:35）チェックし、条件達成時にメールで通知します。")
 
-if st.session_state.pop("alert_saved", False):
-    st.success("アラート設定を保存しました")
 
 session = get_session()
 watches = session.query(Watchlist).filter_by(user_id=user_id).order_by(Watchlist.added_at.desc()).all()
@@ -86,7 +84,7 @@ for idx in INDICES:
                     ))
                 s.commit()
                 s.close()
-                st.session_state["alert_saved"] = True
+                st.toast("アラート設定を保存しました", icon="✅")
                 st.rerun()
         with c2:
             if existing:
@@ -169,7 +167,7 @@ else:
                         ))
                 s.commit()
                 s.close()
-                st.session_state["alert_saved"] = True
+                st.toast("アラート設定を保存しました", icon="✅")
                 st.rerun()
 
             if w_alerts:
