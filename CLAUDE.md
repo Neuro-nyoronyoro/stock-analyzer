@@ -16,14 +16,25 @@
 - `.env.example` を参考に手動作成する
 
 ## AWS EC2環境
-- URL: `http://13.114.149.93:8501`
+- URL: `https://app.kimura-stock.com`（旧: `http://13.114.149.93:8501`）
 - インスタンス: t3.micro（東京リージョン ap-northeast-1）
 - OS: Amazon Linux 2023
+- **Elastic IP: `57.182.51.133`**（固定済み・停止してもIPが変わらない）
 - **ユーザー: `ssm-user`**（ec2-user ではない）
 - **サービス名: `stock-analyzer.service`**
 - **アプリパス: `/home/ssm-user/stock_analyzer/`**（ハイフンなし）
 - SSH: Session Manager経由（ポート22不可・会社ネットワーク制限のため）
 - Python: 3.9.25。パッケージは `/home/ssm-user/.local/` 配下 → スクリプト実行は sudo なし
+
+## ネットワーク・SSL構成
+- **ドメイン**: `app.kimura-stock.com`（Route53 A レコードで `57.182.51.133` に紐付け済み）
+- **nginx**: リバースプロキシとして動作（80→443リダイレクト・443→localhost:8501）
+  - 設定ファイル: `/etc/nginx/conf.d/stock-analyzer.conf`
+- **SSL証明書**: Let's Encrypt（Certbot で取得・自動更新設定済み）
+  - 証明書パス: `/etc/letsencrypt/live/app.kimura-stock.com/`
+  - 有効期限: 2026-09-13（自動更新されるため手動更新不要）
+- **開放ポート**: 80（HTTP）・443（HTTPS）・8501（Streamlit直接）
+- 会社ネットワークからはSSLインスペクションにより接続不可（自宅・モバイル回線からは正常接続できる）
 
 ## EC2へのファイル反映手順
 ```bash
