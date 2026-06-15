@@ -12,10 +12,7 @@ st.title("⚙️ アカウント設定")
 
 if st.session_state.pop("profile_saved", False):
     st.markdown(
-        '<div style="position:fixed;top:3.5rem;left:50%;transform:translateX(-50%);"
-        "background:#d4edda;color:#155724;padding:.6rem 1.8rem;border-radius:.5rem;"
-        "border:1px solid #c3e6cb;z-index:9999;font-size:1rem;text-align:center;"
-        "box-shadow:0 2px 8px rgba(0,0,0,.2);">✅ 設定を保存しました</div>',
+        """<div style="position:fixed;top:3.5rem;left:50%;transform:translateX(-50%);background:#d4edda;color:#155724;padding:.6rem 1.8rem;border-radius:.5rem;border:1px solid #c3e6cb;z-index:9999;font-size:1rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);">✅ 設定を保存しました</div>""",
         unsafe_allow_html=True,
     )
 
