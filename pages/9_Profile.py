@@ -16,8 +16,6 @@ from db.database import get_user_profile, save_user_profile
 st.subheader("📊 投資プロフィール設定")
 st.caption("スクリーニングのスコアリング重みとAIの分析傾向がこの設定に合わせて変わります。")
 
-if st.session_state.pop("invest_profile_saved", False):
-    st.success("投資プロフィールを保存しました。次回のスクリーニングから反映されます。")
 
 STYLE_PRESETS = {
     "dividend": {
@@ -121,7 +119,7 @@ with st.form("invest_profile_form"):
                 weights=selected_weights,
                 investment_memo=memo,
             )
-            st.session_state["invest_profile_saved"] = True
+            st.toast("投資プロフィールを保存しました。次回のスクリーニングから反映されます。", icon="✅")
             st.rerun()
 
 st.divider()
@@ -137,7 +135,7 @@ with st.form("profile_form"):
         if ok:
             st.session_state["user_name"]  = new_name
             st.session_state["user_email"] = new_email
-            st.success("プロフィールを更新しました")
+            st.toast("プロフィールを更新しました", icon="✅")
             st.rerun()
         else:
             st.error(err)
@@ -159,7 +157,7 @@ with st.form("password_form"):
             from core.auth import change_password
             ok, err = change_password(user["id"], current_pw, new_pw)
             if ok:
-                st.success("パスワードを変更しました")
+                st.toast("パスワードを変更しました", icon="✅")
             else:
                 st.error(err)
 
