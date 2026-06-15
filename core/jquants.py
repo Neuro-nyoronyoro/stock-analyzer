@@ -38,12 +38,15 @@ def get_listed_info(ticker: str) -> dict:
 
 
 def get_daily_quote(ticker: str) -> dict:
-    """最新の日次株価を取得する"""
+    """最新の日次株価を取得する（直近7日間に絞って取得）"""
     try:
         code = _code(ticker)
-        r = requests.get(f"{_BASE}/equities/bars/daily",
-                         params={"code": code},
-                         headers=_headers(), timeout=10)
+        date_from = (datetime.today() - timedelta(days=7)).strftime("%Y-%m-%d")
+        r = requests.get(
+            f"{_BASE}/equities/bars/daily",
+            params={"code": code, "from": date_from},
+            headers=_headers(), timeout=10,
+        )
         if r.status_code != 200:
             return {}
         quotes = r.json().get("data", [])
@@ -78,12 +81,37 @@ def get_price_history_jquants(ticker: str, period: str = "1y") -> pd.DataFrame:
         df = df.set_index("Date").sort_index()
 
         # yfinance互換の列名に変換（調整済み優先）
-        # J-Quants v2フィールド: AdjO/AdjH/AdjL/AdjC/AdjVo（調整済）, O/H/L/C/Vo（非調整）
-        for src, dst in [("AdjO","Open"),("AdjH","High"),("AdjL","Low"),("AdjC","Close"),("AdjVo","Volume")]:
-            if src in df.columns:
+        # J-Quants v2: AdjustmentOpen/High/Low/Close/Volume または AdjO/AdjH/AdjL/AdjC/AdjVo
+        # 非調整フォールバック: Open/High/Low/Close/Volume または O/H/L/C/Vo
+        adjusted_mappings = [
+            ("AdjustmentOpen",   "Open"),
+            ("AdjustmentHigh",   "High"),
+            ("AdjustmentLow",    "Low"),
+            ("AdjustmentClose",  "Close"),
+            ("AdjustmentVolume", "Volume"),
+            ("AdjO",  "Open"),
+            ("AdjH",  "High"),
+            ("AdjL",  "Low"),
+            ("AdjC",  "Close"),
+            ("AdjVo", "Volume"),
+        ]
+        fallback_mappings = [
+            ("Open",   "Open"),
+            ("High",   "High"),
+            ("Low",    "Low"),
+            ("Close",  "Close"),
+            ("Volume", "Volume"),
+            ("O",  "Open"),
+            ("H",  "High"),
+            ("L",  "Low"),
+            ("C",  "Close"),
+            ("Vo", "Volume"),
+        ]
+        for src, dst in adjusted_mappings:
+            if src in df.columns and dst not in df.columns:
                 df[dst] = pd.to_numeric(df[src], errors="coerce")
-        for src, dst in [("O","Open"),("H","High"),("L","Low"),("C","Close"),("Vo","Volume")]:
-            if dst not in df.columns and src in df.columns:
+        for src, dst in fallback_mappings:
+            if src in df.columns and dst not in df.columns:
                 df[dst] = pd.to_numeric(df[src], errors="coerce")
 
         cols = [c for c in ["Open","High","Low","Close","Volume"] if c in df.columns]
@@ -122,10 +150,23 @@ def get_dividend(ticker: str) -> list[dict]:
 
 def _latest_annual(fins: list[dict]) -> tuple[dict, dict]:
     """財務サマリーから直近2期の年次データを抽出する"""
-    annual = [f for f in fins if f.get("CurPerType") == "FY" and f.get("NP") not in (None, "")]
+    def _is_fy(f):
+        # J-Quants v2: TypeOfCurrentPeriod / 旧フィールド: CurPerType
+        t = f.get("TypeOfCurrentPeriod") or f.get("CurPerType") or ""
+        return t == "FY"
+
+    def _has_profit(f):
+        v = f.get("Profit") or f.get("NP")
+        return v not in (None, "")
+
+    annual = [f for f in fins if _is_fy(f) and _has_profit(f)]
     if not annual:
-        annual = [f for f in fins if f.get("CurPerType") == "FY"]
-    annual = sorted(annual, key=lambda x: x.get("DiscDate") or x.get("CurPerEn") or "", reverse=True)
+        annual = [f for f in fins if _is_fy(f)]
+
+    def _sort_key(f):
+        return f.get("DisclosedDate") or f.get("DiscDate") or f.get("CurPerEn") or ""
+
+    annual = sorted(annual, key=_sort_key, reverse=True)
     return (annual[0] if annual else {}), (annual[1] if len(annual) > 1 else {})
 
 
@@ -150,22 +191,26 @@ def get_stock_info_jquants(ticker: str) -> dict:
                     pass
         return None
 
-    # 株価: AdjClose → Close
-    price = _f(quote, "AdjC", "C", "AdjClose", "Close")
+    # 株価: J-Quants v2 = AdjustmentClose / 旧 = AdjC / 非調整 = Close
+    price = _f(quote, "AdjustmentClose", "AdjC", "AdjClose", "Close", "C")
 
-    # 財務指標（v2フィールド名）
-    # NP=当期純利益, Sales=売上高, Eq=純資産, TA=総資産
-    np_     = _f(latest, "NP")
-    sales   = _f(latest, "Sales")
-    eq      = _f(latest, "Eq")
-    ta      = _f(latest, "TA")
-    eps     = _f(latest, "EPS")
-    bps     = _f(latest, "BPS")
-    prev_np = _f(prev,   "NP")
-    prev_s  = _f(prev,   "Sales")
+    # 財務指標 — J-Quants v2の正式フィールド名と旧フィールド名の両方を試みる
+    np_     = _f(latest, "Profit",            "NP")            # 当期純利益
+    sales   = _f(latest, "NetSales",          "Sales")         # 売上高
+    eq      = _f(latest, "Equity",            "NetAssets", "Eq")  # 純資産
+    ta      = _f(latest, "TotalAssets",       "TA")            # 総資産
+    eps     = _f(latest, "EarningsPerShare",  "EPS")           # 1株当たり純利益
+    bps     = _f(latest, "BookValuePerShare", "BPS")           # 1株当たり純資産
+    prev_np = _f(prev,   "Profit",            "NP")
+    prev_s  = _f(prev,   "NetSales",          "Sales")
 
-    # 配当: DivAnn=実績年間配当, FDivAnn=予想年間配当
-    div_ann    = _f(latest, "DivAnn", "FDivAnn")
+    # 配当: 予想年間配当 → 実績年間配当の順で取得
+    div_ann = _f(
+        latest,
+        "ForecastDividendPerShareAnnual",
+        "ResultDividendPerShareAnnual",
+        "FDivAnn", "DivAnn",
+    )
     payout_ann = _f(latest, "PayoutRatioAnn", "FPayoutRatioAnn")
 
     # 各指標を計算
