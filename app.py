@@ -3,10 +3,10 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
-import extra_streamlit_components as stx
 from db.database import init_db, create_user_session, get_user_by_session_token, delete_user_session
+from core.cookie_utils import get_session_token, set_session_cookie, clear_session_cookie
 from core.yahoo_direct import get_price_history_direct
 
 init_db()
@@ -16,9 +16,6 @@ st.set_page_config(
     page_icon="📈",
     layout="wide",
 )
-
-COOKIE_NAME = "stock_session"
-cookie_manager = stx.CookieManager(key="_sc_mgr")
 
 # ── クエリパラメータ処理（メール認証・パスワードリセット） ──────────
 params = st.query_params
@@ -55,7 +52,7 @@ if "reset" in params:
 
 # ── クッキーからの自動ログイン ────────────────────────────────────
 if not st.session_state.get("user_id"):
-    _token = cookie_manager.get(COOKIE_NAME)
+    _token = get_session_token()
     if _token:
         _u = get_user_by_session_token(_token)
         if _u:
@@ -65,11 +62,6 @@ if not st.session_state.get("user_id"):
             st.session_state["is_admin"]       = _u["is_admin"]
             st.session_state["_session_token"] = _token
             st.rerun()
-        else:
-            try:
-                cookie_manager.delete(COOKIE_NAME)
-            except Exception:
-                pass
 
 # ── 未ログイン：ログイン / 登録 / パスワード忘れ ──────────────────
 if not st.session_state.get("user_id"):
@@ -90,8 +82,7 @@ if not st.session_state.get("user_id"):
                     st.session_state["user_name"]      = user["display_name"]
                     st.session_state["is_admin"]       = user["is_admin"]
                     st.session_state["_session_token"] = token
-                    cookie_manager.set(COOKIE_NAME, token,
-                                       expires_at=datetime.now() + timedelta(days=30))
+                    set_session_cookie(token)
                     st.rerun()
                 else:
                     st.error(err)
@@ -144,10 +135,7 @@ with st.sidebar:
                 delete_user_session(_t)
             except Exception:
                 pass
-        try:
-            cookie_manager.delete(COOKIE_NAME)
-        except Exception:
-            pass
+        clear_session_cookie()
         st.session_state.clear()
         st.rerun()
 
