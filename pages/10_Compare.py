@@ -10,7 +10,7 @@ import anthropic
 from core.fetcher import get_stock_info, get_price_history
 from core.scorer import calc_total_score
 from core.auth_check import require_login
-from db.database import get_user_profile
+from db.database import get_user_profile, get_session, Watchlist, Portfolio
 from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
 st.set_page_config(page_title="銘柄比較", page_icon="⚖️", layout="wide")
@@ -31,23 +31,63 @@ _STYLE_MAP = {
 _RISK_MAP    = {"low": "低リスク志向（安定重視）", "medium": "中程度のリスク許容", "high": "高リスク許容（積極的）"}
 _HORIZON_MAP = {"short": "短期（1年未満）", "medium": "中期（1〜5年）", "long": "長期（5年以上）"}
 
-# ── ティッカー入力 ──────────────────────────────────────────────
-st.subheader("比較する銘柄を入力（2〜5銘柄）")
-st.caption("日本株は「9432.T」、米国株は「AAPL」のように入力してください")
+# ── 保存済み銘柄をDBから取得 ────────────────────────────────────
+_db = get_session()
+_watches   = _db.query(Watchlist).filter_by(user_id=user["id"]).order_by(Watchlist.added_at.desc()).all()
+_portfolio = _db.query(Portfolio).filter_by(user_id=user["id"]).all()
+_db.close()
 
-cols = st.columns(5)
-placeholders = ["9432.T", "7203.T", "AAPL", "MSFT", "GOOG"]
-tickers_input = []
-for i, col in enumerate(cols):
-    with col:
-        val = st.text_input(f"銘柄{i+1}", placeholder=placeholders[i], key=f"cmp_t{i}")
-        if val.strip():
-            tickers_input.append(val.strip().upper())
+# ウォッチリスト・ポートフォリオをまとめてオプション辞書に（重複はウォッチ優先）
+_saved: dict[str, str] = {}  # ticker → 表示名
+for p in _portfolio:
+    _saved[p.ticker] = f"{p.ticker} — {p.name}（ポートフォリオ）"
+for w in _watches:
+    _saved[w.ticker] = f"{w.ticker} — {w.name}（ウォッチリスト）"
+
+# ── ティッカー入力 ──────────────────────────────────────────────
+st.subheader("比較する銘柄を選択・入力（2〜5銘柄）")
+
+# プルダウン選択
+selected_from_saved: list[str] = []
+if _saved:
+    _options = list(_saved.keys())
+    _labels  = {t: _saved[t] for t in _options}
+    _chosen  = st.multiselect(
+        "ウォッチリスト・ポートフォリオから選択",
+        options=_options,
+        format_func=lambda t: _labels[t],
+        max_selections=5,
+        placeholder="銘柄を選んでください（複数可）",
+    )
+    selected_from_saved = _chosen
+else:
+    st.caption("ウォッチリストまたはポートフォリオに銘柄を登録すると、ここから素早く選択できます。")
+
+# 手入力スロット（プルダウンで埋まっていない分だけ表示）
+remaining_slots = max(0, 5 - len(selected_from_saved))
+manual_tickers: list[str] = []
+if remaining_slots > 0:
+    st.caption(f"手入力で追加（あと最大 {remaining_slots} 銘柄）　例: 9432.T / AAPL")
+    manual_cols = st.columns(min(remaining_slots, 5))
+    for i, col in enumerate(manual_cols):
+        with col:
+            val = st.text_input(f"手入力 {i+1}", placeholder=["9432.T","7203.T","AAPL","MSFT","GOOG"][i], key=f"cmp_t{i}", label_visibility="collapsed")
+            if val.strip():
+                manual_tickers.append(val.strip().upper())
+
+# 重複排除して最終リストを確定
+seen: set[str] = set()
+tickers_input: list[str] = []
+for t in selected_from_saved + manual_tickers:
+    if t not in seen:
+        seen.add(t)
+        tickers_input.append(t)
+tickers_input = tickers_input[:5]
 
 period = st.sidebar.selectbox("チャート期間", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
 
 if len(tickers_input) < 2:
-    st.info("2銘柄以上入力すると比較できます。")
+    st.info("2銘柄以上選択または入力すると比較できます。")
     st.stop()
 
 run = st.button("⚖️ 比較する", type="primary", use_container_width=False)
