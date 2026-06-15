@@ -29,10 +29,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 銘柄入力（ウォッチリストページからの遷移時は自動入力）
+# 銘柄入力（ウォッチリストからの遷移 or URLクエリパラメータから復元）
 _prefill = st.session_state.pop("prefill_ticker", "")
 if _prefill:
     st.session_state["ticker_input"] = _prefill
+elif not st.session_state.get("ticker_input"):
+    _url_ticker = st.query_params.get("ticker", "")
+    if _url_ticker:
+        st.session_state["ticker_input"] = _url_ticker.upper()
+
 col1, col2 = st.columns([3, 1])
 with col1:
     ticker_input = st.text_input(
@@ -56,6 +61,9 @@ if not ticker_input:
     st.stop()
 
 ticker = ticker_input.strip().upper()
+# URLにティッカーを保存（ページリロード後の復元用）
+if ticker:
+    st.query_params["ticker"] = ticker
 
 # データ取得
 with st.spinner(f"{ticker} のデータを取得中..."):
