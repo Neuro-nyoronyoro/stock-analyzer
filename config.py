@@ -28,4 +28,4 @@ DEFAULT_SCREEN = {
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
 SES_SENDER_EMAIL = os.getenv("SES_SENDER_EMAIL", "")
-APP_URL = os.getenv("APP_URL", "http://app.kimura-stock.com:8501")
+APP_URL = os.getenv("APP_URL", "https://app.kimura-stock.com")
