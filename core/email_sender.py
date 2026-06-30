@@ -1,3 +1,5 @@
+import sys
+
 import boto3
 from botocore.exceptions import ClientError
 from config import SES_SENDER_EMAIL, APP_URL
@@ -9,6 +11,7 @@ def _client():
 
 def _send(to_email: str, subject: str, body: str) -> bool:
     if not SES_SENDER_EMAIL:
+        print("[email_sender] SES_SENDER_EMAIL not set, skipping send", file=sys.stderr, flush=True)
         return False
     try:
         _client().send_email(
@@ -20,7 +23,10 @@ def _send(to_email: str, subject: str, body: str) -> bool:
             },
         )
         return True
-    except ClientError:
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "Unknown")
+        message = e.response.get("Error", {}).get("Message", str(e))
+        print(f"[email_sender] SES send failed to={to_email} code={code} message={message}", file=sys.stderr, flush=True)
         return False
 
 
