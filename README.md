@@ -97,23 +97,23 @@
 
 ## 使用技術・AWS サービス
 
-### アプリケーション
+### アプリケーション・ミドルウェア（EC2 上で動作）
 
 | 技術 | 用途 |
 |---|---|
 | Python 3.11 | アプリケーション本体 |
 | Streamlit | Web UI フレームワーク |
 | SQLite | ユーザー・ポートフォリオ・アラートデータ永続化 |
+| nginx | リバースプロキシ・HTTPS 終端・HTTP→HTTPS リダイレクト |
 | J-Quants Light API | 日本株の財務・株価データ |
 | Yahoo Finance API | 米国株の財務・株価データ |
 | Claude API (claude-sonnet-4-6) | AI 銘柄レポート・投資チャット |
 
-### AWS
+### AWS サービス
 
 | サービス | 用途 | 選定理由 |
 |---|---|---|
 | EC2 (t3.micro) | アプリサーバー | SQLite 永続化・常時起動が必要 |
-| nginx | リバースプロキシ・HTTPS 終端 | Let's Encrypt 証明書管理、HTTP→HTTPS 強制リダイレクト |
 | Route 53 | DNS 管理 | カスタムドメイン（kimura-stock.com）の A レコード管理 |
 | AWS SES | メール送信 | 認証メール・アラートメールの信頼性確保 |
 | Systems Manager (Session Manager) | EC2 接続 | SSH ポート (22) 不要でセキュアな操作 |
