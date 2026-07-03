@@ -28,7 +28,6 @@ Write-Host "作業ブランチ作成: $branch"
 
 $totalCost = 0.0
 $sessions  = @()
-$success   = $false
 $lastGate  = ""
 
 for ($i = 1; $i -le $MaxIter; $i++) {
@@ -36,7 +35,7 @@ for ($i = 1; $i -le $MaxIter; $i++) {
 
     # --- Checker: 緑なら即終了（トークン節約）---
     $gateOut = & $PythonExe @GateArgs 2>&1
-    if ($LASTEXITCODE -eq 0) { $success = $true; break }
+    if ($LASTEXITCODE -eq 0) { break }
 
     # --- 無進展検出（停止条件）---
     $sig = ($gateOut -join "`n")
@@ -72,11 +71,13 @@ for ($i = 1; $i -le $MaxIter; $i++) {
 }
 
 # --- 検証結果の確定 ---
-$finalGate = & $PythonExe @GateArgs 2>&1
-$greenNow  = ($LASTEXITCODE -eq 0)
+& $PythonExe @GateArgs *>$null
+$greenNow = ($LASTEXITCODE -eq 0)
 
 if ($greenNow) {
-    git add scripts/check_alerts.py config.py 2>$null
+    $ErrorActionPreference = "SilentlyContinue"
+    git add scripts/check_alerts.py config.py
+    $ErrorActionPreference = "Stop"
     $staged = git diff --cached --name-only
     if ($staged) {
         git commit -m "[Work-PC] loop#1: check_alerts.py のIP直書きを設定/DNS名へ外出し" | Out-Null
