@@ -1,4 +1,4 @@
-# 最小ループ#1: scripts/check_alerts.py のIP直書きを検出→修正→検証→Vault記録
+﻿# 最小ループ#1: scripts/check_alerts.py のIP直書きを検出→修正→検証→Vault記録
 # 前提: Claude Code はプラン認証でログイン済み / ANTHROPIC_API_KEY は未設定
 # CLIメモ: --max-turns は現行CLI(確認済み)に存在しないため --max-budget-usd で代替
 
@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot  = "C:\Users\kimura-h-0\Desktop\株式投資ツール"
 $VaultLog  = "C:\Users\kimura-h-0\repos\work-vault\outputs\stock-analyzer\loop-log.md"
 $MaxIter   = 3
-$MaxBudget = "0.10"   # Maker 1回あたりのコスト上限（USD）
+$MaxBudget = "0.10"
 $Model     = "claude-sonnet-4-6"
 $PythonExe = "C:\Users\kimura-h-0\anaconda3\envs\stock_analyzer\python.exe"
 $GateArgs  = @("-m", "pytest", "tests/test_no_hardcoded_ip.py", "-q")
@@ -46,27 +46,18 @@ for ($i = 1; $i -le $MaxIter; $i++) {
     }
     $lastGate = $sig
 
-    Write-Host "[Checker] 赤: $($gateOut -join ' | ')"
+    Write-Host "[Checker] 赤を検出。Maker を起動します。"
 
     # --- Maker: プラン認証の claude -p が修正を試みる ---
-    $prompt = @'
-scripts/check_alerts.py の49行目にハードコードされたIPアドレス（13.114.149.93）があります。
-DNS名(app.kimura-stock.com)または config.py の設定値へ外出しして修正してください。
+    $prompt = "scripts/check_alerts.py の49行目にハードコードされたIPアドレス（13.114.149.93）があります。" `
+        + " DNS名(app.kimura-stock.com)または config.py の設定値へ外出しして修正してください。" `
+        + " 厳守: 変更は scripts/check_alerts.py と config.py の設定読み込み部分のみ。他のファイルに触れない。" `
+        + " 修正後に pytest tests/test_no_hardcoded_ip.py が緑になること。" `
+        + " 秘密情報（APIキー等）を差分・ログに絶対に含めない。"
 
-厳守:
-- 変更は scripts/check_alerts.py と config.py の設定読み込み部分のみ。他のファイルに触れない
-- 修正後に pytest tests/test_no_hardcoded_ip.py が緑になること
-- 秘密情報（APIキー等）を差分・ログに絶対に含めない
-'@
+    $raw = claude -p $prompt --output-format json --permission-mode acceptEdits --allowedTools "Read,Edit,Write" --max-budget-usd $MaxBudget --model $Model
 
-    $raw = claude -p $prompt `
-        --output-format json `
-        --permission-mode acceptEdits `
-        --allowedTools "Read,Edit,Write" `
-        --max-budget-usd $MaxBudget `
-        --model $Model
-
-    # コスト・session_id を取得（フィールド名はバージョンで変わる可能性あり・防御的に拾う）
+    # コスト・session_id を取得（フィールド名はバージョンで変わる可能性あり）
     try {
         $j = $raw | ConvertFrom-Json
         $cost = 0.0
@@ -76,7 +67,7 @@ DNS名(app.kimura-stock.com)または config.py の設定値へ外出しして�
         $totalCost += $cost
         if ($j.session_id) { $sessions += $j.session_id }
     } catch {
-        Write-Host "[WARN] JSON解析に失敗。コスト不明。生出力: $raw"
+        Write-Host "[WARN] JSON解析に失敗。コスト不明。"
     }
 }
 
@@ -105,14 +96,10 @@ if (-not (Test-Path $vaultDir)) {
     New-Item -ItemType Directory -Force $vaultDir | Out-Null
 }
 if (-not (Test-Path $VaultLog)) {
-    @"
-# ループ実行ログ（loop-01-hardcoded-ip）
-
-| 日時 | ブランチ | 反復 | 結果 | コスト(USD) | session_id |
-|---|---|---|---|---|---|
-"@ | Out-File -Encoding utf8 $VaultLog
+    $header = "# ループ実行ログ（loop-01-hardcoded-ip）`n`n| 日時 | ブランチ | 反復 | 結果 | コスト(USD) | session_id |`n|---|---|---|---|---|---|"
+    $header | Out-File -Encoding utf8 $VaultLog
 }
 Add-Content -Encoding utf8 -Path $VaultLog -Value $row
 
-Write-Host "=== 完了: $status / 反復=$i / コスト=`$$([math]::Round($totalCost, 4)) ==="
+Write-Host "=== 完了: $status / 反復=$i / コスト=$([math]::Round($totalCost, 4)) ==="
 Write-Host "PRをレビューしてマージするのは人間（L1）。"
