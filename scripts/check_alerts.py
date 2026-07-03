@@ -46,7 +46,7 @@ def send_alert_email(to_email: str, triggered: list):
         f"【株価アラート】{datetime.now().strftime('%Y-%m-%d %H:%M')} 時点\n\n"
         + "\n".join(lines)
         + "\n\n株式投資ダッシュボードで詳細を確認してください。\n"
-        APP_URL
+        + APP_URL
     )
 
     client.send_email(
