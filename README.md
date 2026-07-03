@@ -117,6 +117,7 @@
 | Route 53 | DNS 管理 | カスタムドメイン（kimura-stock.com）の A レコード管理 |
 | AWS SES | メール送信 | 認証メール・アラートメールの信頼性確保 |
 | Systems Manager (Session Manager) | EC2 接続 | SSH ポート (22) 不要でセキュアな操作 |
+| EventBridge | EC2 の自動起動・停止 | 稼働時間を 7:00〜21:00 に限定しコスト削減 |
 
 ---
 
@@ -170,6 +171,10 @@ Streamlit はデフォルトでポート 8501 で起動する。nginx をフロ�
 - cron よりもプロセス管理が確実（再起動・障害検知が容易）
 
 **学び:** systemd のユニットファイル記述、`ExecStart` / `WorkingDirectory` / `Environment` の設定方法を実装した。LPIC で学んだ概念を実運用で確認できた。
+
+### EventBridge で EC2 の稼働時間を制限する理由
+
+個人・家族向けの用途であり不特定多数へのサービス展開を想定していないため、コスト削減を優先した。EventBridge スケジュールで EC2 を毎日 7:00 に自動起動・21:00 に自動停止し、深夜・早朝は停止状態を維持している。
 
 ---
 
