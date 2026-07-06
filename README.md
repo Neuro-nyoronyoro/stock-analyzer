@@ -225,6 +225,21 @@ journalctl -u stock-analyzer -n 100 --no-pager
 sudo tail -f /var/log/nginx/access.log
 ```
 
+### CloudWatch 監視
+
+CloudWatch エージェントを EC2 にインストールし、デフォルトでは取得できないメモリ・ディスク使用率をカスタムメトリクスとして収集している。
+
+| メトリクス | 名前空間 | 収集間隔 |
+|---|---|---|
+| メモリ使用率 | StockAnalyzer / mem_used_percent | 1分 |
+| ディスク使用率 | StockAnalyzer / disk_used_percent | 1分 |
+
+アラーム設定（しきい値 80%・2回連続で SNS 通知）:
+- `stock-analyzer-memory`: メモリ使用率
+- `stock-analyzer-disk`: ディスク使用率
+
+通知先: SNS トピック `stock-analyzer-alerts`（メール通知）
+
 ### 本番での実際のトラブル対応記録
 
 **事例: SES メール認証リンクが壊れていた（2026-06-21）**
@@ -258,5 +273,4 @@ sudo tail -f /var/log/nginx/access.log
 
 - **IaC（Terraform）:** EC2・SES・Route53・IAM の構成をコードで再現可能にする
 - **GitHub Actions CI:** push 時に静的チェック（pytest・flake8）を自動実行
-- **CloudWatch メトリクス:** EC2 CPU/メモリの監視とアラームを設定する
 - **エラーハンドリング改善:** `email_sender.py` のサイレント失敗（`except ClientError: return False`）を適切なロギングに置き換える
