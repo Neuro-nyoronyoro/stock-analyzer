@@ -1,0 +1,11 @@
+# stock-analyzer crontab（EC2 上で crontab -e で設定）
+# EC2 のタイムゾーンは UTC のため、以下はすべて UTC 表記
+# JST = UTC + 9 時間
+#
+# 実行タイミング（JST）: 平日 9:05 / 12:30 / 15:35
+# 実行ユーザー: ssm-user
+# ログ出力先: /home/ssm-user/stock_analyzer/logs/alert.log
+
+5 0 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+30 3 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+35 6 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1

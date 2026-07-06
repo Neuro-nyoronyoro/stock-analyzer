@@ -81,7 +81,7 @@
   │  │  │  SQLite（ローカル DB）                           │  │  │
   │  │  └──────────────────────────────────────────────────┘  │  │
   │  │                                                        │  │
-  │  │  cron（平日 9:00 / 12:00 / 15:30）                     │  │
+  │  │  cron（平日 9:05 / 12:30 / 15:35 JST）                  │  │
   │  │  └─► check_alerts.py                                  │  │
   │  │                  │                                     │  │
   │  └──────────────────┼─────────────────────────────────────┘  │
@@ -211,10 +211,10 @@ sudo systemctl status stock-analyzer
 株価アラートチェックを EC2 の crontab で定義:
 
 ```
-# 平日の取引時間帯に3回チェック
-0  9 * * 1-5 /path/to/python scripts/check_alerts.py
-0 12 * * 1-5 /path/to/python scripts/check_alerts.py
-30 15 * * 1-5 /path/to/python scripts/check_alerts.py
+# 平日の取引時間帯に3回チェック（UTC 表記 / JST = UTC+9）
+5  0 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+30 3 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+35 6 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
 ```
 
 条件（目標株価・下落率）に合致した銘柄は SES 経由でメール通知される。
