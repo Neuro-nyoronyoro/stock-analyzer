@@ -5,7 +5,7 @@ import boto3
 from datetime import date, datetime
 from core.fetcher import get_stock_info
 from db.database import get_session, PriceAlert, User
-from config import SES_SENDER_EMAIL
+from config import SES_SENDER_EMAIL, APP_URL
 
 AWS_REGION    = "ap-northeast-1"
 INDEX_TICKERS = {"^N225", "^DJI", "^IXIC"}
@@ -46,7 +46,7 @@ def send_alert_email(to_email: str, triggered: list):
         f"【株価アラート】{datetime.now().strftime('%Y-%m-%d %H:%M')} 時点\n\n"
         + "\n".join(lines)
         + "\n\n株式投資ダッシュボードで詳細を確認してください。\n"
-        "http://13.114.149.93:8501"
+        + APP_URL
     )
 
     client.send_email(
