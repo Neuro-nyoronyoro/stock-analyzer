@@ -1,5 +1,7 @@
 # stock-analyzer
 
+[![CI](https://github.com/Neuro-nyoronyoro/stock-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/Neuro-nyoronyoro/stock-analyzer/actions/workflows/ci.yml)
+
 個人・家族向けの株式投資情報収集・分析 Web アプリ。AWS 上に本番環境を構築・運用中。
 
 **実稼働 URL:** https://app.kimura-stock.com（要ログイン）
@@ -265,11 +267,10 @@ CloudWatch エージェントを EC2 にインストールし、デフォルト�
 | HTTPS 強制 | nginx で HTTP → HTTPS 301 リダイレクト。SSL 証明書は Let's Encrypt |
 | メール認証 | DKIM / SPF / DMARC / Custom MAIL FROM をすべて設定済み（SES プロダクションモード） |
 | 認証・認可 | 全ページに `require_login()` を実装。管理者承認後のみログイン可能 |
-| コードの静的検査 | `tests/` に pytest ベースの Checker を用意（ハードコード IP 検出等） |
+| コードの静的検査 | `tests/` に pytest ベースの Checker を用意（ハードコード IP 検出等）。GitHub Actions で push のたびに自動実行 |
 
 ---
 
 ## 今後の改善予定
 
 - **IaC（Terraform）:** EC2・SES・Route53・IAM の構成をコードで再現可能にする
-- **GitHub Actions CI:** push 時に静的チェック（pytest・flake8）を自動実行
