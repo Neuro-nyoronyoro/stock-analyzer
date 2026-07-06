@@ -273,4 +273,3 @@ CloudWatch エージェントを EC2 にインストールし、デフォルト�
 
 - **IaC（Terraform）:** EC2・SES・Route53・IAM の構成をコードで再現可能にする
 - **GitHub Actions CI:** push 時に静的チェック（pytest・flake8）を自動実行
-- **エラーハンドリング改善:** `email_sender.py` のサイレント失敗（`except ClientError: return False`）を適切なロギングに置き換える
