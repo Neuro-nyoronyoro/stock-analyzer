@@ -259,5 +259,4 @@ sudo tail -f /var/log/nginx/access.log
 - **IaC（Terraform）:** EC2・SES・Route53・IAM の構成をコードで再現可能にする
 - **GitHub Actions CI:** push 時に静的チェック（pytest・flake8）を自動実行
 - **CloudWatch メトリクス:** EC2 CPU/メモリの監視とアラームを設定する
-- **RDS への移行評価:** 利用者増加時の SQLite の限界（同時書き込み）を認識しており、移行基準を事前に定義する
 - **エラーハンドリング改善:** `email_sender.py` のサイレント失敗（`except ClientError: return False`）を適切なロギングに置き換える
