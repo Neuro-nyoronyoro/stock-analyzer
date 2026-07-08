@@ -5,7 +5,12 @@
 # 実行タイミング（JST）: 平日 9:05 / 12:30 / 15:35
 # 実行ユーザー: ssm-user
 # ログ出力先: /home/ssm-user/stock_analyzer/logs/alert.log
+#
+# Docker化（2026-07-07）に伴い、直接 python3 を呼ぶ方式から
+# 稼働中コンテナに対して docker compose exec する方式に変更。
+# cron はカレントディレクトリを前提にできないため -f でcomposeファイルを明示指定する。
+# -T は疑似TTYを割り当てない指定（非対話実行のcronでは必須）。
 
-5 0 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
-30 3 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
-35 6 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+5 0 * * 1-5 /usr/bin/docker compose -f /home/ssm-user/stock_analyzer/docker-compose.yml -p stock-analyzer exec -T app python scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+30 3 * * 1-5 /usr/bin/docker compose -f /home/ssm-user/stock_analyzer/docker-compose.yml -p stock-analyzer exec -T app python scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+35 6 * * 1-5 /usr/bin/docker compose -f /home/ssm-user/stock_analyzer/docker-compose.yml -p stock-analyzer exec -T app python scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1

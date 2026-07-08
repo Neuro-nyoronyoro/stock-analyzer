@@ -1,0 +1,32 @@
+# git / IDE
+.git/
+.github/
+.vscode/
+.idea/
+
+# シークレット・鍵
+.env
+secret-key/
+*.pem
+
+# データベース・キャッシュ（ボリュームでマウントするためイメージに含めない）
+*.db
+*.sqlite
+*.sqlite3
+
+# Python キャッシュ
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# 仮想環境
+.venv/
+venv/
+env/
+
+# テスト・ドキュメント・その他
+tests/
+README.md
+CLAUDE.md
+起動.bat

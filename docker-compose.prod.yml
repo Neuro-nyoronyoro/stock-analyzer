@@ -1,0 +1,12 @@
+services:
+  app:
+    image: __ECR_IMAGE__
+    container_name: stock-analyzer-app
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./stock_analyzer.db:/app/stock_analyzer.db
+      - ./yfinance_cache.sqlite:/app/yfinance_cache.sqlite
+    restart: unless-stopped

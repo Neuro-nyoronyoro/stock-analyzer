@@ -1,0 +1,38 @@
+{
+  "vpc-provider:account=600627320448:filter.isDefault=true:region=ap-northeast-1:returnAsymmetricSubnets=true": {
+    "vpcId": "vpc-0bc1276acdd62cec7",
+    "vpcCidrBlock": "172.31.0.0/16",
+    "ownerAccountId": "600627320448",
+    "availabilityZones": [],
+    "subnetGroups": [
+      {
+        "name": "Public",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-07a3e195807f27d57",
+            "cidr": "172.31.32.0/20",
+            "availabilityZone": "ap-northeast-1a",
+            "routeTableId": "rtb-0a3dce27b72473080"
+          },
+          {
+            "subnetId": "subnet-027e011535f9315fb",
+            "cidr": "172.31.0.0/20",
+            "availabilityZone": "ap-northeast-1c",
+            "routeTableId": "rtb-0a3dce27b72473080"
+          },
+          {
+            "subnetId": "subnet-074de035cb2a10db4",
+            "cidr": "172.31.16.0/20",
+            "availabilityZone": "ap-northeast-1d",
+            "routeTableId": "rtb-0a3dce27b72473080"
+          }
+        ]
+      }
+    ]
+  },
+  "hosted-zone:account=600627320448:domainName=kimura-stock.com:region=ap-northeast-1": {
+    "Id": "/hostedzone/Z0086021HDQ1BOP8AKV1",
+    "Name": "kimura-stock.com."
+  }
+}

@@ -12,7 +12,7 @@
 
 **「開発を生成 AI に委ねたらどこまでいけるか」という実験プロジェクトです。** AWS SAA 取得後に実務経験のないサービスを実際に動かすことで、ハンズオンの実践経験を積むことも目的に含んでいます。
 
-コード生成・設定ファイル生成（nginx・systemd 等）は Claude に全面委任し、インフラ構成の選定も AI との相談を通じて決めました。自分は以下を担当しました：
+コード生成・設定ファイル生成（nginx・Docker・AWS CDK 等）は Claude に全面委任し、インフラ構成の選定も AI との相談を通じて決めました。自分は以下を担当しました：
 
 - AWS 上での実際の操作・設定（EC2・SES・Route53 の設定、SES プロダクション申請等）
 - Session Manager 経由の EC2 作業（コマンド実行・ファイル編集）
@@ -60,40 +60,48 @@
 
 ## アーキテクチャ
 
+全リソースは AWS CDK（Python、4スタック: Network / Compute / Dns / Monitoring）で定義・構築している。
+
 ```
   ユーザー
   (ブラウザ)
       │ HTTPS
       ▼
-  Route 53（app.kimura-stock.com）
+  Route 53（app.kimura-stock.com）── CDK: DnsStack（既存ホストゾーン参照、Aレコードは直接UPSERT）
       │
       ▼
   ┌────────────────── AWS (ap-northeast-1) ──────────────────────┐
   │                                                              │
-  │  ┌─────────────────── EC2 t3.micro ───────────────────────┐  │
+  │  ┌─────────────────── EC2 t3.micro（Elastic IP）──────────┐  │
+  │  │              CDK: ComputeStack / NetworkStack           │  │
   │  │                                                        │  │
   │  │  ┌──────────────────────────────────────────────────┐  │  │
   │  │  │ nginx                         ポート 80 / 443    │  │  │
-  │  │  │  ・HTTP → HTTPS リダイレクト（301）              │  │  │
-  │  │  │  ・SSL/TLS 終端（Let's Encrypt）                 │  │  │
+  │  │  │  ・HTTP → HTTPS リダイレクト（301, certbot管理） │  │  │
+  │  │  │  ・SSL/TLS 終端（Let's Encrypt, 自動更新cron）   │  │  │
   │  │  │  ・リバースプロキシ                              │  │  │
   │  │  └──────────────────────┬───────────────────────────┘  │  │
   │  │                         │ localhost:8501               │  │
   │  │  ┌──────────────────────▼───────────────────────────┐  │  │
-  │  │  │ Streamlit（systemd 管理）                        │  │  │
-  │  │  │  SQLite（ローカル DB）                           │  │  │
+  │  │  │ Docker コンテナ（docker compose 管理）           │  │  │
+  │  │  │  Streamlit + SQLite（bind mount で永続化）       │  │  │
+  │  │  │  イメージは Amazon ECR から pull                 │  │  │
   │  │  └──────────────────────────────────────────────────┘  │  │
   │  │                                                        │  │
   │  │  cron（平日 9:05 / 12:30 / 15:35 JST）                  │  │
-  │  │  └─► check_alerts.py                                  │  │
+  │  │  └─► docker compose exec app check_alerts.py           │  │
   │  │                  │                                     │  │
   │  └──────────────────┼─────────────────────────────────────┘  │
   │                     ▼                                        │
   │                 AWS SES ──────────────────────────────────────┼──► メール通知
   │                                                              │
+  │  CloudWatch Agent → CloudWatchアラーム → SNS ── CDK: MonitoringStack
+  │  EventBridge（7:00 JST起動/21:00 JST停止）→ Lambda → EC2 start/stop │
+  │                                                              │
   └──────────────────────────────────────────────────────────────┘
 
   操作端末 ──── AWS Session Manager ────► EC2（SSH ポート不要）
+  Docker イメージ ──── docker push ────► Amazon ECR ────► EC2 が pull
 
   外部 API: J-Quants（日本株）/ Yahoo Finance（米国株）/ Claude API（AI レポート）
 ```
@@ -108,7 +116,8 @@
 |---|---|
 | Python 3.11 | アプリケーション本体 |
 | Streamlit | Web UI フレームワーク |
-| SQLite | ユーザー・ポートフォリオ・アラートデータ永続化 |
+| Docker / docker-compose | アプリのコンテナ化・実行管理（`restart: unless-stopped`） |
+| SQLite | ユーザー・ポートフォリオ・アラートデータ永続化（bind mount でコンテナ外に保持） |
 | nginx | リバースプロキシ・HTTPS 終端・HTTP→HTTPS リダイレクト |
 | J-Quants Light API | 日本株の財務・株価データ |
 | Yahoo Finance API | 米国株の財務・株価データ |
@@ -118,11 +127,13 @@
 
 | サービス | 用途 | 選定理由 |
 |---|---|---|
+| AWS CDK (Python) | IaC | 全AWSリソースをコードで定義・再現可能にする |
 | EC2 (t3.micro) | アプリサーバー | SQLite 永続化・常時起動が必要 |
+| ECR | Docker イメージレジストリ | EC2 へのデプロイ元イメージを保管 |
 | Route 53 | DNS 管理 | カスタムドメイン（kimura-stock.com）の A レコード管理 |
 | AWS SES | メール送信 | 認証メール・アラートメールの信頼性確保 |
-| Systems Manager (Session Manager) | EC2 接続 | SSH ポート (22) 不要でセキュアな操作 |
-| EventBridge | EC2 の自動起動・停止 | 稼働時間を 7:00〜21:00 に限定しコスト削減 |
+| Systems Manager (Session Manager / Parameter Store) | EC2 接続・シークレット管理 | SSH ポート (22) 不要な接続、`.env` は SecureString で受け渡し |
+| EventBridge + Lambda | EC2 の自動起動・停止 | 稼働時間を 7:00〜21:00 に限定しコスト削減 |
 
 ---
 
@@ -162,15 +173,25 @@ Streamlit はデフォルトでポート 8501 で起動する。nginx をフロ�
 
 **学び:** Web サービスにおけるリバースプロキシの役割（SSL 終端・ポート変換・リダイレクト）を実際のサービス公開で習得した。
 
-### systemd でアプリを管理する理由
+### Docker コンテナでアプリを管理する理由（systemd + pip 直接実行から移行）
 
-`stock-analyzer.service` として登録することで:
+当初は `systemd` でアプリを直接（pip環境で）実行していたが、2026年10月開始予定のSES案件（AWSサーバ→サーバレス移行）に向けた学習を兼ね、Dockerコンテナ化した。
 
-- EC2 再起動後に自動で Streamlit が起動する
-- `systemctl status` で状態確認、`journalctl -u stock-analyzer` でログ確認ができる
-- cron よりもプロセス管理が確実（再起動・障害検知が容易）
+- ローカルとEC2で全く同じ実行環境（Dockerイメージ）を使えるため「ローカルでは動くのにEC2では動かない」を防げる
+- `docker-compose.yml` の `restart: unless-stopped` により、systemdユニットを書かなくてもプロセス管理（再起動）が完結する
+- ECRへのイメージpush→EC2でのpullという流れにすることで、デプロイ手順自体が明確になった
 
-**学び:** systemd のユニットファイル記述、`ExecStart` / `WorkingDirectory` / `Environment` の設定方法を実装した。LPIC で学んだ概念を実運用で確認できた。
+**学び:** マルチステージビルド・非rootユーザー実行・bind mountでのデータ永続化など、Dockerの基本を実サービスの移行を通じて習得した。特に「`WORKDIR`が作るディレクトリの所有権は`COPY --chown`の対象外」「bind mount先がホストに存在しないとディレクトリ化される」など、ドキュメントだけでは気づきにくい実践的な落とし穴を複数踏んで学んだ。
+
+### AWS CDK（Python）でIaC化する理由
+
+上記のDocker化と合わせて、これまでAWSコンソールで手作業構築していたインフラをCDKでコード化した。
+
+- VPC・SecurityGroup・IAMロール・EC2・ECR・Route53参照・CloudWatchアラーム・EventBridge+Lambdaまで、4つのスタック（Network / Compute / Dns / Monitoring）に分けてコード化
+- 既存の本番環境（Route53ホストゾーン・SESドメイン検証）は「新規作成せず参照のみ」の方針とし、誤って再作成・重複させるリスクを避けた
+- 全リソースがコード化されたことで、EC2インスタンスの作り直し（今回のDocker移行に伴う実施）も再現性を持って行えた
+
+**学び:** `AWS::Route53::RecordSet` のようにCloudFormationのImport機能が非対応のリソースタイプが存在することを知った。全リソースが必ずしもIaCに完全統合できるわけではなく、「参照のみ管理・実体は別手段」という設計判断も必要になる。
 
 ### EventBridge で EC2 の稼働時間を制限する理由
 
@@ -180,25 +201,29 @@ Streamlit はデフォルトでポート 8501 で起動する。nginx をフロ�
 
 ## デプロイ手順
 
-ローカルで変更を開発し、EC2 に反映する手順の概要。
+ローカルでビルドしたDockerイメージをECR経由でEC2に反映する手順の概要。
 
 ```bash
-# 1. ローカルで動作確認
-conda run -n stock_analyzer streamlit run app.py --server.port 8502
+# 1. ローカルでDocker動作確認
+docker compose -p stock-analyzer up -d
 
-# 2. GitHub に push
-git push origin main
+# 2. ECRへpush
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.ap-northeast-1.amazonaws.com
+docker tag stock-analyzer:local <account>.dkr.ecr.ap-northeast-1.amazonaws.com/stock-analyzer:latest
+docker push <account>.dkr.ecr.ap-northeast-1.amazonaws.com/stock-analyzer:latest
 
-# 3. Session Manager で EC2 に接続し pull & 再起動
-git -C /home/ssm-user/stock_analyzer pull
-sudo systemctl restart stock-analyzer
-sudo systemctl status stock-analyzer
+# 3. SSM経由でEC2に最新イメージをpull・再起動（Session Manager接続やaws ssm send-commandで実行）
+cd /opt/stock-analyzer
+docker compose -p stock-analyzer pull
+docker compose -p stock-analyzer up -d
 
 # 4. ブラウザで動作確認
 # https://app.kimura-stock.com
 ```
 
-**環境変数:** `.env` ファイルで管理し、`.gitignore` に含めて Git 管理対象外にしている（`.env.example` でキー名のみ共有）。
+インフラ自体（EC2・VPC・IAM・DNS参照・監視）の変更は `infra/` のCDKコードを編集し、`cdk deploy` で反映する。
+
+**環境変数:** `.env` は AWS Systems Manager Parameter Store（SecureString）にアップロードし、EC2起動後にそこから取得して配置する。Gitリポジトリには含めない（`.env.example` でキー名のみ共有）。
 
 ---
 
@@ -206,13 +231,13 @@ sudo systemctl status stock-analyzer
 
 ### アラート通知（cron）
 
-株価アラートチェックを EC2 の crontab で定義:
+株価アラートチェックを `/etc/cron.d/stock-analyzer` で定義し、稼働中のDockerコンテナに対して実行する（Amazon Linux 2023 は cron が標準では入っていないため `cronie` を別途導入している）:
 
 ```
 # 平日の取引時間帯に3回チェック（UTC 表記 / JST = UTC+9）
-5  0 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
-30 3 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
-35 6 * * 1-5 /usr/bin/python3 /home/ssm-user/stock_analyzer/scripts/check_alerts.py >> /home/ssm-user/stock_analyzer/logs/alert.log 2>&1
+5  0 * * 1-5 root /usr/bin/docker compose -f /opt/stock-analyzer/docker-compose.yml -p stock-analyzer exec -T app python scripts/check_alerts.py >> /var/log/stock-analyzer/alert.log 2>&1
+30 3 * * 1-5 root /usr/bin/docker compose -f /opt/stock-analyzer/docker-compose.yml -p stock-analyzer exec -T app python scripts/check_alerts.py >> /var/log/stock-analyzer/alert.log 2>&1
+35 6 * * 1-5 root /usr/bin/docker compose -f /opt/stock-analyzer/docker-compose.yml -p stock-analyzer exec -T app python scripts/check_alerts.py >> /var/log/stock-analyzer/alert.log 2>&1
 ```
 
 条件（目標株価・下落率）に合致した銘柄は SES 経由でメール通知される。
@@ -221,7 +246,7 @@ sudo systemctl status stock-analyzer
 
 ```bash
 # アプリログ
-journalctl -u stock-analyzer -n 100 --no-pager
+docker compose -p stock-analyzer logs --tail 100
 
 # nginx アクセスログ
 sudo tail -f /var/log/nginx/access.log
@@ -273,4 +298,5 @@ CloudWatch エージェントを EC2 にインストールし、デフォルト�
 
 ## 今後の改善予定
 
-- **IaC（Terraform）:** EC2・SES・Route53・IAM の構成をコードで再現可能にする
+- ~~**IaC（Terraform）:** EC2・SES・Route53・IAM の構成をコードで再現可能にする~~ → **実装済み（AWS CDK, Python）**。Route53/SESは参照のみ、EC2・SecurityGroup・IAMロール・ECR・CloudWatchアラーム・EventBridge+Lambdaはコード管理下
+- **サーバレス化（ECS Fargate / App Runner）:** 現在のEC2常時起動モデルから、コンテナホストの管理自体をAWS任せにする構成へ移行し、稼働時間に応じた課金・スケーリングを実現する
