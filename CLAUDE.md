@@ -16,36 +16,49 @@
 - `.env.example` を参考に手動作成する
 
 ## AWS EC2環境
-- URL: `https://app.kimura-stock.com`（旧: `http://13.114.149.93:8501`）
-- インスタンス: t3.micro（東京リージョン ap-northeast-1）
+- URL: `https://app.kimura-stock.com`
+- インスタンス: t3.micro（東京リージョン ap-northeast-1）、**Docker運用**（2026-07-08にDocker化+CDK化移行済み）
 - OS: Amazon Linux 2023
-- **Elastic IP: `57.182.51.133`**（固定済み・停止してもIPが変わらない）
+- **Elastic IP: `54.178.98.12`**（固定済み・停止してもIPが変わらない。旧`57.182.51.133`は2026-08-05にrelease済み、記載が残っていたら誤り）
 - **ユーザー: `ssm-user`**（ec2-user ではない）
-- **サービス名: `stock-analyzer.service`**
-- **アプリパス: `/home/ssm-user/stock_analyzer/`**（ハイフンなし）
 - SSH: Session Manager経由（ポート22不可・会社ネットワーク制限のため）
-- Python: 3.9.25。パッケージは `/home/ssm-user/.local/` 配下 → スクリプト実行は sudo なし
+- アプリはDockerコンテナとして稼働。ホスト側にPython/pipは無い（コンテナ内で完結）
+- **アプリパス（ホスト側）: `/opt/stock-analyzer/`**（`docker-compose.yml`・`.env`・DBファイルを配置）
+- **コンテナ名: `stock-analyzer-app`**、compose project名: `stock-analyzer`
+- **ECRリポジトリ**: `600627320448.dkr.ecr.ap-northeast-1.amazonaws.com/stock-analyzer`（`:latest`タグ運用）
+- IaC: `infra/`（Python CDK）が**現在デプロイされている実体**。`infra-ts/`はTypeScript書き換え中でまだ未デプロイ（cdk deployする前に必ずどちらが対象か確認すること）
 
 ## ネットワーク・SSL構成
-- **ドメイン**: `app.kimura-stock.com`（Route53 A レコードで `57.182.51.133` に紐付け済み）
-- **nginx**: リバースプロキシとして動作（80→443リダイレクト・443→localhost:8501）
+- **ドメイン**: `app.kimura-stock.com`（Route53 A レコードで `54.178.98.12` に紐付け済み）
+- **nginx**: リバースプロキシとして動作（80→443リダイレクト・443→localhost:8501、ホストOS側で稼働・コンテナ外）
   - 設定ファイル: `/etc/nginx/conf.d/stock-analyzer.conf`
-- **SSL証明書**: Let's Encrypt（Certbot で取得・自動更新設定済み）
+- **SSL証明書**: Let's Encrypt（Certbot で取得・自動更新cron設定済み）
   - 証明書パス: `/etc/letsencrypt/live/app.kimura-stock.com/`
-  - 有効期限: 2026-09-13（自動更新されるため手動更新不要）
-- **開放ポート**: 80（HTTP）・443（HTTPS）・8501（Streamlit直接）
+  - 有効期限: 2026-10-06（自動更新されるため手動更新不要）
+- **開放ポート**: 80（HTTP）・443（HTTPS）・8501（Streamlit直接、コンテナからホストへport forward）
 - 会社ネットワークからはSSLインスペクションにより接続不可（自宅・モバイル回線からは正常接続できる）
 
-## EC2へのファイル反映手順
-```bash
-# ファイルを編集後、EC2へ転送してサービス再起動
-# ファイル書き込みは必ず sudo tee を使う（cat > は permission denied）
-sudo tee /home/ssm-user/stock_analyzer/ファイル名 > /dev/null << 'PYEOF'
-（ファイル内容）
-PYEOF
+## EC2へのファイル反映手順（Docker運用）
+アプリコードの変更は、ホストへの直接配置ではなく**Dockerイメージのビルド→ECR push→EC2でpull**の流れになる。
 
-# サービス再起動（必ず末尾に付ける）
-sudo systemctl restart stock-analyzer.service
+```bash
+# 1. ローカルでビルド・ECRへpush
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 600627320448.dkr.ecr.ap-northeast-1.amazonaws.com
+docker build -t 600627320448.dkr.ecr.ap-northeast-1.amazonaws.com/stock-analyzer:latest .
+docker push 600627320448.dkr.ecr.ap-northeast-1.amazonaws.com/stock-analyzer:latest
+
+# 2. EC2側（Session Manager経由）で新イメージを反映
+cd /opt/stock-analyzer
+docker compose -p stock-analyzer pull
+docker compose -p stock-analyzer up -d
+```
+
+`.env`など設定ファイルのみの変更の場合（書き込みは必ず `sudo tee`。`cat >` は permission denied）:
+```bash
+sudo tee /opt/stock-analyzer/.env > /dev/null << 'ENVEOF'
+（ファイル内容）
+ENVEOF
+cd /opt/stock-analyzer && docker compose -p stock-analyzer up -d
 ```
 
 ## ファイル構成
@@ -57,6 +70,15 @@ sudo systemctl restart stock-analyzer.service
 ├── .env                # APIキー類（Git管理外）
 ├── .env.example        # キー名のテンプレート
 ├── CLAUDE.md           # このファイル
+├── Dockerfile          # 本番用アプリイメージ
+├── docker-compose.prod.yml  # EC2上でのコンテナ起動定義（__ECR_IMAGE__はCDKがビルド時に置換）
+├── infra/              # AWS CDK（Python）※現在デプロイされている実体
+│   └── infra/
+│       ├── network_stack.py     # VPC・セキュリティグループ・IAMロール
+│       ├── compute_stack.py     # EC2・ECR・EIP（Docker運用のUserData含む）
+│       ├── dns_stack.py         # Route53
+│       └── monitoring_stack.py  # CloudWatchアラーム・SNS・EC2起動停止Lambda
+├── infra-ts/            # AWS CDK（TypeScript書き換え中）※まだ未デプロイ、infra/と混同しないこと
 ├── core/
 │   ├── auth.py         # 登録・ログイン・パスワードリセット・プロフィール
 │   ├── auth_check.py   # require_login() / require_admin()
@@ -138,21 +160,25 @@ SCORE_WEIGHTS = {
 - **現在: SANDBOXモード** → 検証済みアドレスにしか送れない
 - SESプロダクションアクセス申請中（承認後に家族のアカウント登録作業を実施）
 
-## EC2 自動停止・起動スケジュール（EventBridge Scheduler）
-| スケジュール名 | Cron式 | タイムゾーン | 動作 |
+## EC2 自動停止・起動スケジュール（EventBridge Rules + Lambda）
+`infra/infra/monitoring_stack.py` でCDK管理。**旧EventBridge Scheduler方式（`ec2-stop-night`等、手動作成）は2026-08-05に廃止・削除済み**。現在は下記のEventBridge Rules→Lambda方式のみ。
+
+| リソース | Cron式(UTC) | JST | 動作 |
 |---|---|---|---|
-| `ec2-stop-night` | `0 21 * * ? *` | Asia/Tokyo | 毎日 21:00 に EC2 停止 |
-| `ec2-start-morning` | `0 7 * * ? *` | Asia/Tokyo | 毎日 07:00 に EC2 起動 |
+| `StartRule` | `cron(0 22 * * ? *)` | 07:00 起動 | Lambda `StartStopFunction` に `{"action":"start"}` を渡して実行 |
+| `StopRule` | `cron(0 12 * * ? *)` | 21:00 停止 | 同Lambdaに `{"action":"stop"}` を渡して実行 |
 
-- IAM ロール: `EventBridgeScheduler-EC2-StartStop`
-- nginx・stock-analyzer.service は `enabled` 設定済み → EC2 再起動時に自動起動する
-- Elastic IP により停止・起動後も IP アドレスは `57.182.51.133` で固定
+- Lambda（`StartStopFunction`）はboto3で`ec2:start_instances`/`stop_instances`を呼ぶだけの薄い実装
+- インスタンスIDはCDKコードの`instance.instance_id`から自動参照 → **将来インスタンスが再作成されても自動追従する**（手動管理のEventBridge Schedulerで起きた「旧IDを指したまま1ヶ月放置」事故はこの方式なら起きない）
+- nginx・docker・crondは `systemctl enable` 済み → EC2再起動時に自動起動。アプリコンテナは`docker-compose.yml`に`restart: unless-stopped`設定済みなのでdockerデーモン起動と共に自動起動
+- Elastic IPにより停止・起動後もIPアドレスは `54.178.98.12` で固定
 
-## 株価アラート（cron）
-- スクリプト: `/home/ssm-user/stock_analyzer/scripts/check_alerts.py`
-- 平日 9:00 / 12:00 / 15:30 に3回実行（crontab設定済み）
+## 株価アラート（cron、コンテナ内実行）
+- ホスト側cron（`/etc/cron.d/stock-analyzer`）から `docker compose exec -T app python scripts/check_alerts.py` を実行
+- 平日 9:05 / 12:30 / 15:35 JST に3回実行
 - ユーザーごとにSES直接送信（ユーザー間でアラートが混在しない）
 
 ## 既知の課題
 - SESプロダクション承認待ち（承認後、家族のYahoo/外部アドレスへの送信が可能になる）
 - `email_sender.py` の `except ClientError: return False` がサイレント失敗（要改善）
+- `infra-ts/`（TypeScript CDK書き換え）は未完了・未デプロイ。`infra/`（Python）と内容が重複しているので、移行完了までは`infra/`側を正として扱うこと
