@@ -27,6 +27,13 @@
 - **コンテナ名: `stock-analyzer-app`**、compose project名: `stock-analyzer`
 - **ECRリポジトリ**: `600627320448.dkr.ecr.ap-northeast-1.amazonaws.com/stock-analyzer`（`:latest`タグ運用）
 - IaC: `infra/`（Python CDK）が**現在デプロイされている実体**。`infra-ts/`はTypeScript書き換え中でまだ未デプロイ（cdk deployする前に必ずどちらが対象か確認すること）
+- ルートボリューム: 18GB gp3（2026-08-05に8GB→18GBへ拡張）
+- AMIは`compute_stack.py`で特定AMIにピン留め済み（`latest_amazon_linux2023()`は使わない）。理由: `AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>`型パラメータは毎回最新AMIを再解決するため、無関係な変更でも意図せずインスタンス置き換えが発生していた。OSセキュリティパッチは**手動でAMI IDを更新**して適用する運用
+
+### ⚠️ インスタンス置き換え時の注意（2026-08-05に実際に事故発生・要対応）
+- **DBデータはルートボリューム上（`/opt/stock-analyzer/*.db`等）にあり、インスタンス置き換えで消える**（ルートボリュームは`DeleteOnTermination=true`でAMIから毎回まっさらに作成される。旧ボリュームのコピーではない）。`cdk deploy`でインスタンス置き換えが発生する前に**必ずEBSスナップショットを取得**し、置き換え後は一時ボリュームとしてアタッチ→ファイルコピーで復元すること（XFSクローンをmountする際は`-o nouuid`が必須）
+- **`monitoring_stack.py`のEventBridge Rule（Lambda起動停止用）は`instance.instance_id`をスタック間参照(`Fn::GetStackOutput`)で持っているが、ComputeStack側でインスタンスが置き換わっても`cdk deploy`で自動追従しないことを確認済み**（2回deployしても"no changes"のまま旧IDが残った）。インスタンス置き換え後は`aws events list-targets-by-rule`で実際の値を必ず確認し、ズレていたら`aws events put-targets`で手動修正すること。根本原因は未調査
+- 恒久対策として、DBを専用の永続EBSボリューム（`ec2.Volume` + `RemovalPolicy.RETAIN`、ルートボリュームとは別リソース）に分離する改修を検討中（未着手）
 
 ## ネットワーク・SSL構成
 - **ドメイン**: `app.kimura-stock.com`（Route53 A レコードで `54.178.98.12` に紐付け済み）

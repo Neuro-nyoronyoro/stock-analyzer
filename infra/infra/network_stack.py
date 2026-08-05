@@ -5,7 +5,14 @@ from constructs import Construct
 class NetworkStack(Stack):
     """stock-analyzer: 既存デフォルトVPC参照・SecurityGroup・EC2用IAMロール"""
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        domain_name: str,
+        ssm_default_kms_key_arn: str,
+        **kwargs,
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # 新規VPCは作らず、既存のデフォルトVPCを参照する
@@ -42,7 +49,7 @@ class NetworkStack(Stack):
         self.instance_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["ses:SendEmail", "ses:SendRawEmail"],
-                resources=["*"],
+                resources=[f"arn:aws:ses:{self.region}:{self.account}:identity/{domain_name}"],
             )
         )
 
@@ -64,6 +71,6 @@ class NetworkStack(Stack):
         self.instance_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["kms:Decrypt"],
-                resources=["*"],
+                resources=[ssm_default_kms_key_arn],
             )
         )

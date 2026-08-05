@@ -138,10 +138,20 @@ class ComputeStack(Stack):
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             instance_type=ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
-            machine_image=ec2.MachineImage.latest_amazon_linux2023(),
+            # "latest"参照はCloudFormationのAWS::SSM::Parameter::Value型パラメータとなり、
+            # デプロイの度にその時点の最新AMIへ差し替わり意図しないインスタンス置き換えを招くため、
+            # 現在稼働中のAMIに固定する。OSセキュリティパッチ追従は手動でこの値を更新して行う(2026-08-05)
+            machine_image=ec2.MachineImage.generic_linux({"ap-northeast-1": "ami-0af8344e5a6a14ac7"}),
             security_group=security_group,
             role=instance_role,
             user_data=user_data,
+            # デフォルト8GBはDockerイメージ+問題データDB容量を見込むと手狭なため18GBに拡張(2026-08-05)
+            block_devices=[
+                ec2.BlockDevice(
+                    device_name="/dev/xvda",
+                    volume=ec2.BlockDeviceVolume.ebs(18, volume_type=ec2.EbsDeviceVolumeType.GP3),
+                ),
+            ],
         )
 
         self.eip = ec2.CfnEIP(self, "AppEip", domain="vpc")
