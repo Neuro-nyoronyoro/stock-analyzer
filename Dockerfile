@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 FROM python:3.11-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl gosu \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --shell /bin/bash appuser
@@ -31,11 +31,17 @@ COPY --chown=appuser:appuser . .
 # 作成する際にディレクトリへの書き込み権限が必要なため明示的に直す。
 RUN chown appuser:appuser /app
 
-USER appuser
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# コンテナはrootで起動する（entrypointがbind mountの所有権をappuserへ揃えてから
+# gosuでappuserに切り替えるため。ここでUSER appuserを指定すると、
+# EC2再構築等でroot所有のまま復元されたDBファイルをchownできなくなる。2026-08-07の障害を踏まえた変更）。
 
 EXPOSE 8501
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]

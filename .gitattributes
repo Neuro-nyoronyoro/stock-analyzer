@@ -1,0 +1,4 @@
+# シェルスクリプトはLinuxコンテナ内で実行されるため、Windows上でのCRLF変換を防ぐ
+# (core.autocrlf=trueの環境でCRLFになると、コンテナ内で shebang が壊れて起動しなくなる)
+*.sh text eol=lf
+Dockerfile text eol=lf
