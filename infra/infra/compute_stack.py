@@ -126,7 +126,12 @@ class ComputeStack(Stack):
             "chmod 644 /etc/cron.d/certbot-renew",
         )
         user_data.add_commands(
-            "# .envが用意され次第、以下を手動実行してアプリを起動する:",
+            "# .env・stock_analyzer.db・yfinance_cache.sqliteが用意され次第、以下を手動実行してアプリを起動する:",
+            "# 【重要】DB/キャッシュファイルはコンテナ内の非rootユーザーappuser(uid=1000)が書き込むため、",
+            "# 事前に必ず `chown 1000:1000 /opt/stock-analyzer/stock_analyzer.db"
+            " /opt/stock-analyzer/yfinance_cache.sqlite /opt/stock-analyzer` を実行すること。",
+            "# 忘れるとsqlite3.OperationalError: attempt to write a readonly databaseで起動後に書き込み系の",
+            "# 操作（ログイン等）が失敗する（2026-08-05のAMIピン留め+EBSリサイズ時に実際に発生・vault参照）。",
             "# cd /opt/stock-analyzer && docker compose -p stock-analyzer pull && docker compose -p stock-analyzer up -d",
             "# DNS切替後、以下を手動実行してHTTPS証明書を発行する:",
             "# certbot --nginx -d app.kimura-stock.com --non-interactive --agree-tos -m <email> --redirect",
